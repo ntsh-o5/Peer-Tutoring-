@@ -1,0 +1,277 @@
+/* =========================================================================
+   1. CORE GLOBAL STYLES & RESET BASE
+   ========================================================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Arial, sans-serif; /* Fallback array with modern typography weight */
+}
+
+body {
+    display: flex;
+    background: #f4f6f9;
+    color: #333333;
+    min-height: 100vh;
+}
+
+/* =========================================================================
+   2. FIXED SIDEBAR NAVIGATION INTERFACE
+   ========================================================================= */
+.sidebar {
+    width: 250px;
+    min-height: 100vh;
+    background: #0f2038;
+    color: white;
+    padding: 20px;
+}
+
+.sidebar h2 {
+    margin-bottom: 30px;
+    text-align: center;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+}
+
+.sidebar ul {
+    list-style: none;
+}
+
+.sidebar ul li {
+    margin: 10px 0;
+}
+
+.sidebar ul li a {
+    color: #cbd5e1; /* Off-white hue to create structural visual hierarchy */
+    text-decoration: none;
+    display: block;
+    padding: 12px 15px;
+    border-radius: 5px;
+    font-size: 14px;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.sidebar ul li a:hover,
+.sidebar ul li a.active {
+    background: #1d3557;
+    color: white;
+}
+
+/* =========================================================================
+   3. MAIN CONTENT WORKSPACE & MODULE PANELS
+   ========================================================================= */
+.main-content {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 15px;
+}
+
+header h1 {
+    font-size: 26px;
+    color: #0f2038;
+}
+
+/* =========================================================================
+   4. METRIC CARDS STATISTICAL GRID 
+   ========================================================================= */
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.card {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.05);
+    text-align: left; /* Shifted to clean baseline left alignment */
+    border-left: 4px solid #0f2038; /* Visual indicator anchor for key financial data */
+}
+
+.card h3 {
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.card p {
+    font-size: 28px;
+    font-weight: bold;
+    color: #0f2038;
+}
+
+/* =========================================================================
+   5. SEARCH MODULE INPUT ELEMENT ACTIONS
+   ========================================================================= */
+.search-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+}
+
+.search-container input,
+.search-container select {
+    padding: 10px 15px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.search-container input {
+    flex: 1;
+}
+
+.search-container input:focus,
+.search-container select:focus {
+    border-color: #0f2038;
+}
+
+.search-container button {
+    padding: 10px 20px;
+    border: none;
+    background: #0f2038;
+    color: white;
+    cursor: pointer;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.search-container button:hover {
+    background: #1d3557;
+}
+
+/* =========================================================================
+   6. TABLE LEDGER CONTAINER & DATA GRIDS
+   ========================================================================= */
+.table-container {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 25px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table th,
+table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    font-size: 14px;
+    vertical-align: middle; /* Ensures buttons and badges remain perfectly centered vertically */
+}
+
+table th {
+    background: #f8fafc; /* Changed to a clean, light header for better scannability */
+    color: #475569;
+    font-weight: 600;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+table tr:hover {
+    background: #f8fafc; /* Subtle row highlights for readable scanning down lines */
+}
+
+/* =========================================================================
+   7. PROGRAMMATIC STATUS BADGES (SPANS)
+   ========================================================================= */
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.status-badge.pending {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-badge.approved {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* Backward compatibility fallbacks for un-nested selectors */
+span.pending { background: #fef3c7; color: #d97706; padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 12px; display: inline-block; }
+span.approved { background: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 12px; display: inline-block; }
+span.rejected { background: #fee2e2; color: #b91c1c; padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 12px; display: inline-block; }
+
+/* =========================================================================
+   8. ACTIONABLE INTERFACE TRANSACTION BUTTONS
+   ========================================================================= */
+.approve-btn,
+.reject-btn,
+.view-btn {
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+    display: inline-block;
+    vertical-align: middle; /* Ensures perfect horizontal alignment when side-by-side */
+}
+
+.approve-btn:hover,
+.reject-btn:hover,
+.view-btn:hover {
+    opacity: 0.9;
+}
+
+.approve-btn:active,
+.reject-btn:active,
+.view-btn:active {
+    transform: scale(0.98);
+}
+
+.approve-btn {
+    background: #16a34a;
+    color: white;
+}
+
+.reject-btn {
+    background: #dc2626;
+    color: white;
+}
+
+.view-btn {
+    background: #0f2038;
+    color: white;
+}
+
+/* Force buttons inside a table cell form to stay side-by-side smoothly */
+table td form {
+    display: flex;
+    gap: 8px; /* Perfectly spaces the buttons horizontally */
+    align-items: center;
+    justify-content: flex-start;
+}
