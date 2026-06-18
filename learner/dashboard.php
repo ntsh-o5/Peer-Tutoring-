@@ -75,7 +75,7 @@ try {
         <h2>Functional Modules</h2>
         <div class="hub-grid">
             
-            <a href="search_tutor.php" class="hub-tile">
+            <a href="search_tutors.php" class="hub-tile">
                 <h3>🔍 Match & Find Tutors</h3>
                 <p>Input your unit of study code, browse verified peer instructors, and look up real-time structural availabilities.</p>
             </a>
