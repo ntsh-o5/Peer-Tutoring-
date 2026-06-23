@@ -1,4 +1,5 @@
 <?php
+// admin/dashboard.php
 // =========================================================================
 // 1. SESSION & AUTHENTICATION INITIALIZATION
 // =========================================================================
@@ -7,9 +8,6 @@ session_start();
 // Strict security layer gate
 if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !== 'admin') {
     header("Location: ../auth/login.php");
-    echo "<pre>";
-print_r($_SESSION);
-echo "</pre>";
     exit;
 }
 
@@ -24,11 +22,13 @@ $stats = [
     'pending_verifications' => 0,
     'active_bookings'       => 0
 ];
+$recent_activities = [];
 
 try {
-    // Aggregation Query 1: Extract direct profile user roles counts dynamically
+    // 1. Extract profile counts dynamically using verified system column 'role'
     $roleQuery = "SELECT role, COUNT(*) as amount FROM users GROUP BY role";
     $roleStmt = $pdo->query($roleQuery);
+    
     while ($row = $roleStmt->fetch(PDO::FETCH_ASSOC)) {
         $normalizedRole = strtolower(trim($row['role']));
         if ($normalizedRole === 'learner') {
@@ -38,25 +38,41 @@ try {
         }
     }
 
-    // Aggregation Query 2: Look up pending document or status checks (assuming a 'status' or verification tracking setup)
-    // Update table or column string variants to match your exact schema extensions if needed
-    $verifyStmt = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'tutor' AND status = 'pending'");
+    // 2. Look up pending document checks from tutor credentials ledger
+    // Using verification_status matching your schema pattern
+    $verifyStmt = $pdo->query("SELECT COUNT(*) FROM tutor_credentials WHERE LOWER(verification_status) = 'pending'");
     if ($verifyStmt) {
         $stats['pending_verifications'] = (int)$verifyStmt->fetchColumn();
     }
 
-    // Aggregation Query 3: Live active tracking inside bookings table records
-    $bookingStmt = $pdo->query("SELECT COUNT(*) FROM bookings WHERE status = 'approved' OR status = 'active'");
+    // 3. Live active tracking inside bookings table records
+    $bookingStmt = $pdo->query("SELECT COUNT(*) FROM bookings WHERE LOWER(status) IN ('approved', 'scheduled', 'confirmed', 'pending', 'active')");
     if ($bookingStmt) {
         $stats['active_bookings'] = (int)$bookingStmt->fetchColumn();
     }
 
-} catch (PDOException $e) {
-    // Fail silently or fallback log errors during production debugging
-die($e->getMessage());
+    // 4. Live Recent Activities log generation via Union query layout
+    $activityStmt = $pdo->query("
+        (SELECT booking_date as activity_date, 'Session Booked for Unit: ' || unit_code as activity_desc, status 
+         FROM bookings 
+         ORDER BY booking_date DESC 
+         LIMIT 3)
+        UNION ALL
+        (SELECT created_at as activity_date, 'Tutor verification application submitted' as activity_desc, verification_status as status 
+         FROM tutor_credentials 
+         ORDER BY created_at DESC 
+         LIMIT 2)
+        ORDER BY activity_date DESC 
+        LIMIT 5
+    ");
+    if ($activityStmt) {
+        $recent_activities = $activityStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-// Match the specific string written by auth/login.php
+} catch (PDOException $e) {
+    error_log("Admin metric engine anomaly: " . $e->getMessage());
+}
+
 $admin_display_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'Admin';
 ?>
 <!DOCTYPE html>
@@ -66,6 +82,38 @@ $admin_display_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - PeerTutor</title>
     <link rel="stylesheet" href="../assets/css/admin.css">
+    <style>
+        .main-content header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 30px; 
+            border-bottom: 2px solid #e2e8f0; 
+            padding-bottom: 20px; 
+        }
+        .admin-actions { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+        }
+        .admin-profile { 
+            color: #475569; 
+            font-size: 14px; 
+        }
+        .logout-btn { 
+            background: #fee2e2; 
+            color: #b91c1c; 
+            padding: 10px 20px; 
+            border-radius: 6px; 
+            text-decoration: none; 
+            font-weight: 600; 
+            font-size: 13px; 
+            transition: background 0.2s;
+        }
+        .logout-btn:hover {
+            background: #fca5a5;
+        }
+    </style>
 </head>
 <body>
 
@@ -74,14 +122,23 @@ $admin_display_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION
     <div class="main-content">
 
         <header>
-            <h1>Admin Dashboard</h1>
-            <div class="admin-profile">
-                Welcome, <?php echo $admin_display_name; ?>
+            <div>
+                <h1>Admin Dashboard</h1>
+                <p style="margin: 5px 0 0 0; color: #475569;">System Control Room</p>
+            </div>
+
+            <div class="admin-actions">
+                <div class="admin-profile">
+                    Welcome back, <strong><?php echo $admin_display_name; ?></strong>
+                </div>
+
+                <a href="../auth/logout.php" class="logout-btn">
+                    🚪 Terminate Session
+                </a>
             </div>
         </header>
 
         <section class="cards">
-
             <div class="card">
                 <h3>Total Learners</h3>
                 <p><?php echo number_format($stats['total_learners']); ?></p>
@@ -101,54 +158,49 @@ $admin_display_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION
                 <h3>Active Bookings</h3>
                 <p><?php echo number_format($stats['active_bookings']); ?></p>
             </div>
-
         </section>
 
         <section class="recent-activity">
-
-            <h2>Recent Activities</h2>
-
+            <h2>Recent Activities Log</h2>
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Activity</th>
-                            <th>Status</th>
+                            <th>Date / Timestamp</th>
+                            <th>Activity Event Description</th>
+                            <th>Pipeline Status</th>
                         </tr>
                     </thead>
                     <tbody>
-                        
-                        <tr>
-                            <td>15/06/2026</td>
-                            <td>Tutor James submitted credentials</td>
-                            <td>
-                                <span class="status-badge pending">Pending Review</span>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>15/06/2026</td>
-                            <td>New tutoring session booked</td>
-                            <td>
-                                <span class="status-badge approved">Approved</span>
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td>14/06/2026</td>
-                            <td>Progress report submitted</td>
-                            <td>
-                                <span class="status-badge reviewed">Reviewed</span>
-                            </td>
-                        </tr>
-                        
+                        <?php if (empty($recent_activities)): ?>
+                            <tr>
+                                <td colspan="3" style="text-align: center; font-style: italic; color: #475569; padding: 15px;">
+                                    No historical activity operations captured in the system pipeline logs yet.
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($recent_activities as $act): ?>
+                                <tr>
+                                    <td><?php echo date('M d, Y - H:i', strtotime($act['activity_date'])); ?></td>
+                                    <td><?php echo htmlspecialchars($act['activity_desc']); ?></td>
+                                    <td>
+                                        <?php 
+                                            $st = strtolower(trim($act['status']));
+                                            $badge_class = 'pending';
+                                            if (in_array($st, ['approved', 'completed', 'active', 'reviewed', 'confirmed'])) { $badge_class = 'approved'; }
+                                            elseif (in_array($st, ['rejected', 'cancelled'])) { $badge_class = 'rejected'; }
+                                        ?>
+                                        <span class="status-badge <?php echo $badge_class; ?>">
+                                            <?php echo htmlspecialchars(ucfirst($st)); ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
-
         </section>
-
     </div>
 
 </body>

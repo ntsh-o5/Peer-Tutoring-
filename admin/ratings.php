@@ -1,24 +1,66 @@
 <?php
+// admin/ratings.php
 // =========================================================================
-// 1. BACKEND PROCESSING LOGIC & RATING FILTERS
+// 1. SESSION & AUTHENTICATION INITIALIZATION
 // =========================================================================
+session_start();
 
-// Placeholder for Database Connection (e.g., include('config/db.php');)
-
-// Capture and sanitize filter parameters
-$filter_rating = "";
-if (isset($_GET['rating_filter']) && $_GET['rating_filter'] !== "") {
-    $filter_rating = intval($_GET['rating_filter']);
-    // Future database execution logic:
-    // $stmt = $pdo->prepare("SELECT * FROM ratings WHERE score = ?");
-    // $stmt->execute([$filter_rating]);
+if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !== 'admin') {
+    header("Location: ../auth/login.php");
+    exit;
 }
 
-// Summary Metrics Array Data Variables
+require_once '../config/database.php';
+
+$filter_rating = "";
+$reviews_list = [];
+
+// Summary Metrics Array Data Variables Default Fallbacks
 $review_stats = [
-    'average_score' => 4.5,
-    'total_reviews' => 120
+    'average_score' => 0.0,
+    'total_reviews' => 0
 ];
+
+try {
+    // =========================================================================
+    // 2. LIVE METRICS AGGREGATION (Targeting the 'ratings' table)
+    // =========================================================================
+    $statsStmt = $pdo->query("SELECT COUNT(*) as total, AVG(rating) as average FROM ratings");
+    $fetchedStats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($fetchedStats) {
+        $review_stats['total_reviews'] = (int)$fetchedStats['total'];
+        $review_stats['average_score'] = (float)$fetchedStats['average'] ?: 0.0;
+    }
+
+    // =========================================================================
+    // 3. BACKEND RETRIEVAL PROCESSOR & RATING FILTERS
+    // =========================================================================
+    if (isset($_GET['rating_filter']) && $_GET['rating_filter'] !== "") {
+        $filter_rating = intval($_GET['rating_filter']);
+        
+        $stmt = $pdo->prepare("
+            SELECT r.id, r.rating, r.comment, u.name as user_name
+            FROM ratings r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.rating = ?
+            ORDER BY r.id DESC
+        ");
+        $stmt->execute([$filter_rating]);
+        $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmt = $pdo->query("
+            SELECT r.id, r.rating, r.comment, u.name as user_name
+            FROM ratings r
+            JOIN users u ON r.user_id = u.id
+            ORDER BY r.id DESC
+        ");
+        $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+} catch (PDOException $e) {
+    error_log("Administrative rating metric load failure: " . $e->getMessage());
+}
 
 /**
  * Helper function to render numerical scores as clean visual star characters
@@ -26,8 +68,9 @@ $review_stats = [
  * @return string
  */
 function renderStars(int $score): string {
-    $stars = str_repeat("★ ", $score);
-    $empty_stars = str_repeat("☆ ", 5 - $score);
+    $clean_score = max(0, min(5, $score)); // Guard boundaries between 0 and 5
+    $stars = str_repeat("★ ", $clean_score);
+    $empty_stars = str_repeat("☆ ", 5 - $clean_score);
     return trim($stars . $empty_stars);
 }
 ?>
@@ -45,34 +88,34 @@ function renderStars(int $score): string {
     <div class="main-content">
 
         <header>
-            <h1>Ratings & Reviews</h1>
+            <h1>Ratings & Reviews Evaluation Panel</h1>
         </header>
 
         <section class="cards">
             <div class="card">
-                <h3>Average Rating</h3>
+                <h3>System Average Rating Score</h3>
                 <p style="color: #f39c12; font-weight: bold;">
                     <?php echo number_format($review_stats['average_score'], 1); ?> / 5.0
                 </p>
             </div>
 
             <div class="card">
-                <h3>Total Reviews</h3>
+                <h3>Total Platform Reviews Logged</h3>
                 <p><?php echo number_format($review_stats['total_reviews']); ?></p>
             </div>
         </section>
 
         <div class="search-container">
             <form method="GET" action="ratings.php">
-                <select name="rating_filter" style="padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 5px; font-size: 14px;">
-                    <option value="">All Scores</option>
+                <select name="rating_filter" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; margin-right: 5px; font-size: 14px; background: #fff; outline: none;">
+                    <option value="">All Scores View Matrix</option>
                     <option value="5" <?php echo $filter_rating === 5 ? 'selected' : ''; ?>>5 Stars</option>
                     <option value="4" <?php echo $filter_rating === 4 ? 'selected' : ''; ?>>4 Stars</option>
                     <option value="3" <?php echo $filter_rating === 3 ? 'selected' : ''; ?>>3 Stars</option>
                     <option value="2" <?php echo $filter_rating === 2 ? 'selected' : ''; ?>>2 Stars</option>
                     <option value="1" <?php echo $filter_rating === 1 ? 'selected' : ''; ?>>1 Star</option>
                 </select>
-                <button type="submit">Filter Rows</button>
+                <button type="submit" style="cursor:pointer; border-radius:6px; font-weight:600;">Filter Rows</button>
             </form>
         </div>
 
@@ -80,32 +123,35 @@ function renderStars(int $score): string {
             <table>
                 <thead>
                     <tr>
+                        <th>Review ID</th>
                         <th>User Name</th>
                         <th>Numerical Score</th>
-                        <th>Visual Rating</th>
-                        <th>Written Comment</th>
+                        <th>Visual Rating Matrix</th>
+                        <th>Written Comment Observation</th>
                     </tr>
                 </thead>
                 <tbody>
-
-                    <tr>
-                        <td>Brian</td>
-                        <td><strong>5</strong> / 5</td>
-                        <td style="color: #f39c12; font-size: 16px; letter-spacing: 1px;">
-                            <?php echo renderStars(5); ?>
-                        </td>
-                        <td>Excellent tutor support</td>
-                    </tr>
-
-                    <tr>
-                        <td>Mary</td>
-                        <td><strong>4</strong> / 5</td>
-                        <td style="color: #f39c12; font-size: 16px; letter-spacing: 1px;">
-                            <?php echo renderStars(4); ?>
-                        </td>
-                        <td>Good platform</td>
-                    </tr>
-
+                    <?php if (empty($reviews_list)): ?>
+                        <tr>
+                            <td colspan="5" style="text-align: center; font-style: italic; color: #475569; padding: 20px;">
+                                No system review entries match the selected filters context.
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($reviews_list as $row): ?>
+                            <tr>
+                                <td>#RAT-<?php echo $row['id']; ?></td>
+                                <td><strong><?php echo htmlspecialchars($row['user_name']); ?></strong></td>
+                                <td><code><?php echo number_format($row['rating'], 0); ?> / 5</code></td>
+                                <td style="color: #f39c12; font-size: 16px; letter-spacing: 1px; white-space: nowrap;">
+                                    <?php echo renderStars((int)$row['rating']); ?>
+                                </td>
+                                <td style="color: #334155; font-style: italic;">
+                                    "<?php echo htmlspecialchars($row['comment'] ?: 'No evaluation commentary submitted.'); ?>"
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>

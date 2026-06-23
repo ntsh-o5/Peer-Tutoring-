@@ -1,78 +1,121 @@
 <?php
+// admin/ratings.php
 // =========================================================================
-// 1. BACKEND ROUTING LOGIC & PROCESSORS
+// 1. SESSION & AUTHENTICATION INITIALIZATION
 // =========================================================================
+session_start();
 
-// Placeholder for Database Connection (e.g., include('config/db.php');)
-
-// Capture and sanitize search query parameters
-$search_query = "";
-if (isset($_GET['search'])) {
-    $search_query = htmlspecialchars(trim($_GET['search']));
+if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !== 'admin') {
+    header("Location: ../auth/login.php");
+    exit;
 }
 
-// Track report selection targets for preview rendering
-$selected_report_id = null;
-if (isset($_GET['view_report'])) {
-    $selected_report_id = htmlspecialchars(trim($_GET['view_report']));
-    
-    // Future implementation lookup:
-    // $stmt = $pdo->prepare("SELECT * FROM progress_reports WHERE report_id = ?");
-    // $stmt->execute([$selected_report_id]);
-    // $active_report = $stmt->fetch();
-}
+require_once '../config/database.php';
 
-// Dashboard statistics array data setup
-$report_stats = [
-    'total_reports'   => 120,
-    'this_week'       => 15,
-    'pending_review'  => 7
+$filter_rating = "";
+$reviews_list = [];
+
+// Summary Metrics Array Data Variables Default Fallbacks
+$review_stats = [
+    'average_score' => 0.0,
+    'total_reviews' => 0
 ];
+
+try {
+    // =========================================================================
+    // 2. LIVE METRICS AGGREGATION (Targeting the 'ratings' table)
+    // =========================================================================
+    $statsStmt = $pdo->query("SELECT COUNT(*) as total, AVG(rating) as average FROM ratings");
+    $fetchedStats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($fetchedStats) {
+        $review_stats['total_reviews'] = (int)$fetchedStats['total'];
+        $review_stats['average_score'] = (float)$fetchedStats['average'] ?: 0.0;
+    }
+
+    // =========================================================================
+    // 3. BACKEND RETRIEVAL PROCESSOR & RATING FILTERS
+    // =========================================================================
+    if (isset($_GET['rating_filter']) && $_GET['rating_filter'] !== "") {
+        $filter_rating = intval($_GET['rating_filter']);
+        
+        $stmt = $pdo->prepare("
+            SELECT r.id, r.rating, r.comment, u.name as user_name
+            FROM ratings r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.rating = ?
+            ORDER BY r.id DESC
+        ");
+        $stmt->execute([$filter_rating]);
+        $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $stmt = $pdo->query("
+            SELECT r.id, r.rating, r.comment, u.name as user_name
+            FROM ratings r
+            JOIN users u ON r.user_id = u.id
+            ORDER BY r.id DESC
+        ");
+        $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+} catch (PDOException $e) {
+    error_log("Administrative rating metric load failure: " . $e->getMessage());
+}
+
+/**
+ * Helper function to render numerical scores as clean visual star characters
+ * @param int $score
+ * @return string
+ */
+function renderStars(int $score): string {
+    $clean_score = max(0, min(5, $score)); // Guard boundaries between 0 and 5
+    $stars = str_repeat("★ ", $clean_score);
+    $empty_stars = str_repeat("☆ ", 5 - $clean_score);
+    return trim($stars . $empty_stars);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Progress Reports - PeerTutor</title>
+    <title>Ratings & Reviews - PeerTutor</title>
     <link rel="stylesheet" href="../assets/css/admin.css">
 </head>
 <body>
 
-    <?php include('../includes/sidebar.php'); ?>
-
+   <?php include('../includes/sidebar.php'); ?>
     <div class="main-content">
 
         <header>
-            <h1>Progress Reports</h1>
+            <h1>Ratings & Reviews Evaluation Panel</h1>
         </header>
 
         <section class="cards">
             <div class="card">
-                <h3>Total Reports</h3>
-                <p><?php echo number_format($report_stats['total_reports']); ?></p>
+                <h3>System Average Rating Score</h3>
+                <p style="color: #f39c12; font-weight: bold;">
+                    <?php echo number_format($review_stats['average_score'], 1); ?> / 5.0
+                </p>
             </div>
 
             <div class="card">
-                <h3>This Week</h3>
-                <p><?php echo number_format($report_stats['this_week']); ?></p>
-            </div>
-
-            <div class="card">
-                <h3>Pending Review</h3>
-                <p><?php echo number_format($report_stats['pending_review']); ?></p>
+                <h3>Total Platform Reviews Logged</h3>
+                <p><?php echo number_format($review_stats['total_reviews']); ?></p>
             </div>
         </section>
 
         <div class="search-container">
-            <form method="GET" action="reports.php">
-                <input 
-                    type="text" 
-                    name="search" 
-                    placeholder="Search learner or tutor..." 
-                    value="<?php echo $search_query; ?>"
-                >
-                <button type="submit">Search</button>
+            <form method="GET" action="ratings.php">
+                <select name="rating_filter" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; margin-right: 5px; font-size: 14px; background: #fff; outline: none;">
+                    <option value="">All Scores View Matrix</option>
+                    <option value="5" <?php echo $filter_rating === 5 ? 'selected' : ''; ?>>5 Stars</option>
+                    <option value="4" <?php echo $filter_rating === 4 ? 'selected' : ''; ?>>4 Stars</option>
+                    <option value="3" <?php echo $filter_rating === 3 ? 'selected' : ''; ?>>3 Stars</option>
+                    <option value="2" <?php echo $filter_rating === 2 ? 'selected' : ''; ?>>2 Stars</option>
+                    <option value="1" <?php echo $filter_rating === 1 ? 'selected' : ''; ?>>1 Star</option>
+                </select>
+                <button type="submit" style="cursor:pointer; border-radius:6px; font-weight:600;">Filter Rows</button>
             </form>
         </div>
 
@@ -80,72 +123,38 @@ $report_stats = [
             <table>
                 <thead>
                     <tr>
-                        <th>Report ID</th>
-                        <th>Learner</th>
-                        <th>Tutor</th>
-                        <th>Unit</th>
-                        <th>Session Date</th>
-                        <th>Status</th>
-                        <th>Action</th>
+                        <th>Review ID</th>
+                        <th>User Name</th>
+                        <th>Numerical Score</th>
+                        <th>Visual Rating Matrix</th>
+                        <th>Written Comment Observation</th>
                     </tr>
                 </thead>
                 <tbody>
-
-                    <tr>
-                        <td>R001</td>
-                        <td>Brian Otieno</td>
-                        <td>John Mwangi</td>
-                        <td>Networking</td>
-                        <td>15/06/2026</td>
-                        <td><span class="status-badge approved">Submitted</span></td>
-                        <td>
-                            <a href="reports.php?view_report=R001<?php echo !empty($search_query) ? '&search=' . urlencode($search_query) : ''; ?>" class="view-btn" style="text-decoration: none; display: inline-block; text-align: center;">View Report</a>
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td>R002</td>
-                        <td>Mary Njeri</td>
-                        <td>Grace Wanjiku</td>
-                        <td>Database Systems</td>
-                        <td>14/06/2026</td>
-                        <td><span class="status-badge pending">Pending</span></td>
-                        <td>
-                            <a href="reports.php?view_report=R002<?php echo !empty($search_query) ? '&search=' . urlencode($search_query) : ''; ?>" class="view-btn" style="text-decoration: none; display: inline-block; text-align: center;">View Report</a>
-                        </td>
-                    </tr>
-
+                    <?php if (empty($reviews_list)): ?>
+                        <tr>
+                            <td colspan="5" style="text-align: center; font-style: italic; color: #475569; padding: 20px;">
+                                No system review entries match the selected filters context.
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($reviews_list as $row): ?>
+                            <tr>
+                                <td>#RAT-<?php echo $row['id']; ?></td>
+                                <td><strong><?php echo htmlspecialchars($row['user_name']); ?></strong></td>
+                                <td><code><?php echo number_format($row['rating'], 0); ?> / 5</code></td>
+                                <td style="color: #f39c12; font-size: 16px; letter-spacing: 1px; white-space: nowrap;">
+                                    <?php echo renderStars((int)$row['rating']); ?>
+                                </td>
+                                <td style="color: #334155; font-style: italic;">
+                                    "<?php echo htmlspecialchars($row['comment'] ?: 'No evaluation commentary submitted.'); ?>"
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
-
-        <?php if ($selected_report_id === 'R001'): ?>
-            <div class="table-container" style="margin-top:20px;">
-                <h2>Report Details: <?php echo $selected_report_id; ?></h2>
-
-                <p><strong>Learner:</strong> Brian Otieno</p>
-                <p><strong>Tutor:</strong> John Mwangi</p>
-                <p><strong>Unit:</strong> Networking</p>
-                <br>
-                <p><strong>Topics Covered:</strong></p>
-                <p>IPv4 Addressing, Subnetting, CIDR Notation, and ICMP.</p>
-                <br>
-                <p><strong>Performance Assessment:</strong></p>
-                <p>Learner demonstrated a good understanding of subnet calculations but requires more structured practice in CIDR notation mappings.</p>
-                <br>
-                <p><strong>Recommendations:</strong></p>
-                <p>Complete additional manual subnetting exercises and review network class ranges closely.</p>
-                <br>
-                <p><strong>Attendance Record:</strong></p>
-                <p><span class="status-badge approved">Present</span></p>
-            </div>
-        <?php elseif ($selected_report_id): ?>
-            <div class="table-container" style="margin-top:20px;">
-                <h2>Report Details: <?php echo $selected_report_id; ?></h2>
-                <p>Loading database record context details for document ID <strong><?php echo $selected_report_id; ?></strong>...</p>
-                <p><em>(Database dynamic data values bind directly here)</em></p>
-            </div>
-        <?php endif; ?>
 
     </div>
 

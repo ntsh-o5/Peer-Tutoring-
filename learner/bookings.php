@@ -14,13 +14,14 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
     if ($_GET['action'] === 'create') {
         $tutor_id = (int)$_POST['tutor_id'];
-        $unit_code = trim($_POST['unit_code']);
+        $unit_code = strtoupper(trim($_POST['unit_code']));
         $booking_date = $_POST['booking_date'];
 
         try {
-            $stmt = $pdo->prepare("INSERT INTO bookings (learner_id, tutor_id, unit_code, booking_date, status) VALUES (?, ?, ?, ?, 'scheduled')");
+            // Using 'pending' to match our tutor confirmation flow
+            $stmt = $pdo->prepare("INSERT INTO bookings (learner_id, tutor_id, unit_code, booking_date, status) VALUES (?, ?, ?, ?, 'pending')");
             $stmt->execute([$learner_id, $tutor_id, $unit_code, $booking_date]);
-            $message = "Session pipeline provisioned successfully!";
+            $message = "Session pipeline provisioned successfully! Awaiting tutor approval.";
         } catch (PDOException $e) {
             $message = "Booking transaction error: " . $e->getMessage();
         }
@@ -29,7 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
     if ($_GET['action'] === 'cancel') {
         $booking_id = (int)$_POST['booking_id'];
         try {
-            $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND learner_id = ?");
+            // Fixed column references from 'id' to 'booking_id'
+            $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ? AND learner_id = ?");
             $stmt->execute([$booking_id, $learner_id]);
             $message = "Session successfully cancelled.";
         } catch (PDOException $e) {
@@ -41,9 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
         $booking_id = (int)$_POST['booking_id'];
         $new_date = $_POST['new_booking_date'];
         try {
-            $stmt = $pdo->prepare("UPDATE bookings SET booking_date = ?, status = 'scheduled' WHERE id = ? AND learner_id = ?");
+            // Reset to pending so the tutor re-verifies the newly shifted date matrix
+            $stmt = $pdo->prepare("UPDATE bookings SET booking_date = ?, status = 'pending' WHERE booking_id = ? AND learner_id = ?");
             $stmt->execute([$new_date, $booking_id, $learner_id]);
-            $message = "Session date metrics shifted flawlessly.";
+            $message = "Session date metrics shifted flawlessly! Re-sent for approval.";
         } catch (PDOException $e) {
             $message = "Rescheduling fault: " . $e->getMessage();
         }
@@ -53,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
 // Fetch general history stack
 $history = [];
 try {
-    $stmt = $pdo->prepare("SELECT b.id, b.unit_code, b.booking_date, b.status, u.name as tutor_name FROM bookings b JOIN users u ON b.tutor_id = u.id WHERE b.learner_id = ? ORDER BY b.booking_date DESC");
+    // Fixed column reference from b.id to b.booking_id
+    $stmt = $pdo->prepare("SELECT b.booking_id, b.unit_code, b.booking_date, b.status, u.name as tutor_name FROM bookings b JOIN users u ON b.tutor_id = u.id WHERE b.learner_id = ? ORDER BY b.booking_date DESC");
     $stmt->execute([$learner_id]);
     $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -97,32 +101,50 @@ try {
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($history as $row): ?>
+                <?php if (empty($history)): ?>
                     <tr>
-                        <td><strong><?php echo htmlspecialchars($row['tutor_name']); ?></strong></td>
-                        <td><?php echo htmlspecialchars($row['unit_code']); ?></td>
-                        <td><?php echo htmlspecialchars($row['booking_date']); ?></td>
-                        <td><span style="font-weight: 600; text-transform: uppercase; font-size: 11px;"><?php echo htmlspecialchars($row['status']); ?></span></td>
-                        <td>
-                            <?php if ($row['status'] === 'scheduled'): ?>
-                                <!-- inline simple modification triggers -->
-                                <form method="POST" action="bookings.php?action=reschedule" style="display:inline-block;">
-                                    <input type="hidden" name="booking_id" value="<?php echo $row['id']; ?>">
-                                    <input type="datetime-local" name="new_booking_date" required style="padding:4px; font-size:11px;">
-                                    <button type="submit" class="btn-sm" style="background: #64748b;">Shift</button>
-                                </form>
-                                <form method="POST" action="bookings.php?action=cancel" style="display:inline-block;" onsubmit="return confirm('Cancel session?');">
-                                    <input type="hidden" name="booking_id" value="<?php echo $row['id']; ?>">
-                                    <button type="submit" class="btn-sm" style="background: #ef4444;">Cancel</button>
-                                </form>
-                            <?php elseif ($row['status'] === 'completed'): ?>
-                                <a href="rating.php?booking_id=<?php echo $row['id']; ?>" class="btn-sm" style="background: #f59e0b;">Review Feedback</a>
-                            <?php else: ?>
-                                <span style="color: var(--slate); font-size: 12px;">No Actions Available</span>
-                            <?php endif; ?>
-                        </td>
+                        <td colspan="5" style="text-align: center; color: var(--slate); font-style: italic;">You haven't requested any tutor sessions yet.</td>
                     </tr>
-                <?php endforeach; ?>
+                <?php else: ?>
+                    <?php foreach ($history as $row): ?>
+                        <tr>
+                            <td><strong><?php echo htmlspecialchars($row['tutor_name']); ?></strong></td>
+                            <td><?php echo htmlspecialchars($row['unit_code']); ?></td>
+                            <td><?php echo date('M d, Y - H:i', strtotime($row['booking_date'])); ?></td>
+                            <td>
+                                <?php 
+                                $status = strtolower($row['status']);
+                                $color = 'var(--slate)';
+                                if ($status === 'approved' || $status === 'completed') $color = '#10b981';
+                                if ($status === 'pending') $color = '#f59e0b';
+                                if ($status === 'cancelled' || $status === 'rejected') $color = '#ef4444';
+                                ?>
+                                <span style="font-weight: 600; text-transform: uppercase; font-size: 11px; color: <?php echo $color; ?>;">
+                                    <?php echo htmlspecialchars($row['status']); ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php if ($status === 'pending' || $status === 'approved'): ?>
+                                    <!-- Modification workspace tools -->
+                                    <form method="POST" action="bookings.php?action=reschedule" style="display:inline-block;">
+                                        <input type="hidden" name="booking_id" value="<?php echo $row['booking_id']; ?>">
+                                        <input type="datetime-local" name="new_booking_date" required style="padding:4px; font-size:11px;">
+                                        <button type="submit" class="btn-sm" style="background: #64748b;">Shift</button>
+                                    </form>
+                                    <form method="POST" action="bookings.php?action=cancel" style="display:inline-block;" onsubmit="return confirm('Are you sure you want to cancel this peer session?');">
+                                        <input type="hidden" name="booking_id" value="<?php echo $row['booking_id']; ?>">
+                                        <button type="submit" class="btn-sm" style="background: #ef4444;">Cancel</button>
+                                    </form>
+                                <?php elseif ($status === 'completed'): ?>
+                                    <!-- Route directly to ratings.php or feedback handlers -->
+                                    <a href="ratings.php?booking_id=<?php echo $row['booking_id']; ?>" class="btn-sm" style="background: #f59e0b;">Leave Review</a>
+                                <?php else: ?>
+                                    <span style="color: var(--slate); font-size: 12px;">No Actions Available</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>

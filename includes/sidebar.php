@@ -16,6 +16,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <li><a href="ratings.php" class="<?php echo $current_page == 'ratings.php' ? 'active' : ''; ?>">Ratings</a></li>
         <li><a href="users.php" class="<?php echo $current_page == 'users.php' ? 'active' : ''; ?>">Users</a></li>
         <li><a href="profile.php" class="<?php echo $current_page == 'profile.php' ? 'active' : ''; ?>">Profile</a></li>
-        <li><a href="../logout.php">Logout</a></li>
+        <!-- <li><a href="../logout.php">Logout</a></li> -->
     </ul>
 </div>
