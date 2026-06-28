@@ -28,7 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_booking'])) {
     $new_status = ($action === 'accept') ? 'approved' : 'rejected';
     
     try {
-        $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE booking_id = ? AND tutor_id = ? AND status = 'pending'");
+        // Corrected database identifier field from booking_id to id
+        $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ? AND tutor_id = ? AND status = 'pending'");
         $updateStmt->execute([$new_status, $booking_id, $tutor_id]);
         
         if ($updateStmt->rowCount() > 0) {
@@ -50,7 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_complete_sessi
     $booking_id = (int)$_POST['booking_id'];
     
     try {
-        $completeStmt = $pdo->prepare("UPDATE bookings SET status = 'completed' WHERE booking_id = ? AND tutor_id = ? AND status = 'approved'");
+        // Corrected database identifier field from booking_id to id
+        $completeStmt = $pdo->prepare("UPDATE bookings SET status = 'completed' WHERE id = ? AND tutor_id = ? AND status = 'approved'");
         $completeStmt->execute([$booking_id, $tutor_id]);
         
         if ($completeStmt->rowCount() > 0) {
@@ -70,8 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_complete_sessi
 // 3. Fetch all active pending requests
 $pending_requests = [];
 try {
+    // Corrected database identifier field from booking_id to id
     $reqStmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, b.booking_date, u.name as student_name 
+        SELECT b.id as booking_id, b.unit_code, b.booking_date, u.name as student_name 
         FROM bookings b
         JOIN users u ON b.learner_id = u.id
         WHERE b.tutor_id = ? AND b.status = 'pending'
@@ -95,7 +98,8 @@ try {
         }
     }
 
-    $ratingStmt = $pdo->prepare("SELECT AVG(r.rating) as avg_score FROM ratings r JOIN bookings b ON r.booking_id = b.booking_id WHERE b.tutor_id = ?");
+    // Corrected database identifier field from booking_id to id
+    $ratingStmt = $pdo->prepare("SELECT AVG(r.rating) as avg_score FROM ratings r JOIN bookings b ON r.booking_id = b.id WHERE b.tutor_id = ?");
     $ratingStmt->execute([$tutor_id]);
     $avgRating = $ratingStmt->fetchColumn();
     if ($avgRating) {
@@ -113,8 +117,9 @@ try {
 // 5. Fetch next 5 active approved sessions for main snapshot loop
 $upcoming_classes = [];
 try {
+    // Corrected database identifier field from booking_id to id
     $upStmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, b.booking_date, u.name as student_name 
+        SELECT b.id as booking_id, b.unit_code, b.booking_date, u.name as student_name 
         FROM bookings b 
         JOIN users u ON b.learner_id = u.id 
         WHERE b.tutor_id = ? AND b.status = 'approved' 
@@ -157,7 +162,7 @@ try {
         .panel-box { background: white; border-radius: 8px; padding: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); border: 1px solid var(--border-color); height: fit-content; }
         .panel-box h2 { margin-top: 0; color: var(--primary-navy); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; font-size: 18px; }
         
-        .hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        .hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
         .hub-tile { background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px; padding: 15px; text-decoration: none; color: inherit; transition: all 0.2s ease; }
         .hub-tile:hover { border-color: var(--primary-navy); background: #fff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.04); }
         .hub-tile h4 { margin: 0 0 5px 0; color: var(--primary-navy); font-size: 15px; }
@@ -241,6 +246,10 @@ try {
             <div class="panel-box">
                 <h2>Functional Modules Matrix</h2>
                 <div class="hub-grid">
+                    <a href="bookings.php" class="hub-tile" style="border-left: 4px solid var(--primary-navy);">
+                        <h4>📥 Booking Controls Pipeline</h4>
+                        <p>Process inbound invitations, accept assignments, cancel sessions, or complete classes.</p>
+                    </a>
                     <a href="booking_history.php" class="hub-tile">
                         <h4>📜 Booking History Log</h4>
                         <p>Review a complete record index log of all historical past and processed peer allocations.</p>

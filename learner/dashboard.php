@@ -13,7 +13,8 @@ $learner_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user
 $learner_id = $_SESSION['user_id'];
 
 // Global metrics engine configurations
-$metrics = ['completed' => 0, 'scheduled' => 0, 'gpa' => '0.00', 'payment_status' => 'Pending'];
+$metrics = ['completed' => 0, 'scheduled' => 0, 'tracked_units' => 0, 'payment_status' => 'Pending'];
+$unread_alerts_count = 0; // Guard variable definition against undefined compiler errors
 
 try {
     // 1. Calculate Active and Completed booking metrics safely
@@ -21,7 +22,7 @@ try {
     $countStmt->execute([$learner_id]);
     
     while ($row = $countStmt->fetch(PDO::FETCH_ASSOC)) {
-        $status = strtolower($row['status']);
+        $status = strtolower(trim($row['status']));
         if (in_array($status, ['approved', 'scheduled', 'confirmed', 'pending'])) {
             $metrics['scheduled'] += (int)$row['status_count'];
         }
@@ -30,13 +31,12 @@ try {
         }
     }
 
-    // 2. Real-Time Dynamic Aggregate GPA Calculation Engine
-    $gpaStmt = $pdo->prepare("SELECT AVG(grade_point) as computed_gpa FROM academic_progress WHERE learner_id = ?");
-    $gpaStmt->execute([$learner_id]);
-    $gpaResult = $gpaStmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($gpaResult && !is_null($gpaResult['computed_gpa'])) {
-        $metrics['gpa'] = number_format((float)$gpaResult['computed_gpa'], 2);
+    // 2. PostgreSQL Grade Tracker Counting System (Updated to safely handle VARCHAR grades)
+    $gradeStmt = $pdo->prepare("SELECT COUNT(*) as course_count FROM academic_progress WHERE learner_id = ?");
+    $gradeStmt->execute([$learner_id]);
+    $gradeResult = $gradeStmt->fetch(PDO::FETCH_ASSOC);
+    if ($gradeResult) {
+        $metrics['tracked_units'] = (int)$gradeResult['course_count'];
     }
 
     // 3. Notification Count Pipeline
@@ -65,7 +65,7 @@ try {
     <link rel="stylesheet" href="../assets/css/admin.css">
     <style>
         :root { --navy: #0f2038; --slate: #475569; --light: #f8fafc; --border: #e2e8f0; }
-        body { display: flex; min-height: 100vh; background: var(--light); margin: 0; font-family: 'Segoe UI', sans-serif; }
+        body { display: flex; min-height: 100vh; background: var(--light); margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
         .main-stage { flex: 1; padding: 40px; }
         header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid var(--border); padding-bottom: 20px; }
         
@@ -102,7 +102,7 @@ try {
             </div>
         </header>
 
-        <?php if (strtolower($metrics['payment_status']) !== 'completed'): ?>
+        <?php if (strtolower(trim($metrics['payment_status'])) !== 'completed'): ?>
             <div class="pay-banner">
                 <div>
                     <strong>Operational Access Fee Pending:</strong> Your institutional system subscription parameters are restricted. Please clear your platform access dues to secure ongoing bookings.
@@ -114,11 +114,11 @@ try {
         <section class="stats-grid">
             <div class="stat-card"><h3>Active Bookings</h3><p><?php echo $metrics['scheduled']; ?></p></div>
             <div class="stat-card"><h3>Completed Horizons</h3><p><?php echo $metrics['completed']; ?></p></div>
-            <div class="stat-card"><h3>Academic GPA Standing</h3><p style="color: #10b981;"><?php echo $metrics['gpa']; ?></p></div>
+            <div class="stat-card"><h3>Tracked Units</h3><p style="color: #10b981;"><?php echo $metrics['tracked_units']; ?></p></div>
             <div class="stat-card">
                 <h3>Subscription Status</h3>
-                <p style="color: <?php echo strtolower($metrics['payment_status']) === 'completed' ? '#10b981' : '#ef4444'; ?>; font-size: 18px; margin-top: 12px;">
-                    <?php echo strtoupper($metrics['payment_status']); ?>
+                <p style="color: <?php echo strtolower(trim($metrics['payment_status'])) === 'completed' ? '#10b981' : '#ef4444'; ?>; font-size: 18px; margin-top: 12px;">
+                    <?php echo strtoupper(htmlspecialchars($metrics['payment_status'])); ?>
                 </p>
             </div>
         </section>
@@ -138,7 +138,7 @@ try {
 
             <a href="grades.php" class="hub-tile">
                 <h3>📈 Performance Tracker</h3>
-                <p>Log your completed terminal course scores, update performance metrics, and audit your aggregate GPA trends.</p>
+                <p>Log your completed terminal course scores, upload script proofs before/after tutoring, and audit tracking metrics.</p>
             </a>
 
             <a href="rating.php" class="hub-tile">
@@ -153,6 +153,5 @@ try {
 
         </div>
     </div>
-
 </body>
 </html>

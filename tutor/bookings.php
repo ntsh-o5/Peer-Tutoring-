@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
     
     // Strict lookup array map to block structural mutations
     $allowed_statuses = [
-        'accept'   => 'confirmed',
+        'accept'   => 'approved', // Mapped to match your actual approved status baseline
         'deny'     => 'denied',
         'complete' => 'completed'
     ];
@@ -32,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
         $target_status = $allowed_statuses[$action];
         
         try {
-            // Fixed column identifier: using booking_id instead of id
-            $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE booking_id = ? AND tutor_id = ?");
+            // Reconciled identifier: changed booking_id to id to match DB schema
+            $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ? AND tutor_id = ?");
             $updateStmt->execute([$target_status, $booking_id, $tutor_id]);
             
             if ($updateStmt->rowCount() > 0) {
@@ -57,9 +57,9 @@ $booking_requests = [];
 $booking_history = [];
 
 try {
-    // Fixed column identifiers here as well (b.booking_id)
+    // Reconciled identifier: selecting b.id as booking_id to match schema
     $stmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, b.booking_date, b.status, u.name as student_name, u.email as student_email 
+        SELECT b.id as booking_id, b.unit_code, b.booking_date, b.status, u.name as student_name, u.email as student_email 
         FROM bookings b 
         JOIN users u ON b.learner_id = u.id 
         WHERE b.tutor_id = ? 
@@ -69,7 +69,8 @@ try {
     
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $current_status = strtolower(trim($row['status']));
-        if ($current_status === 'scheduled') {
+        // Reconciled criteria: Checking for 'pending' to intercept incoming requests
+        if ($current_status === 'pending') {
             $booking_requests[] = $row; // Incoming pending queue
         } else {
             $booking_history[] = $row;  // Historical tracking rows
