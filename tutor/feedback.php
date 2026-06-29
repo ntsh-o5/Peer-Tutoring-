@@ -14,14 +14,14 @@ $tutor_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_n
 $feedbacks = [];
 
 try {
-    // Patched column mapping (b.booking_id) and forced constraint scoping (b.tutor_id)
+    // Standardized to match the database layouts of image_e681a5.png and image_e68229.png
     $stmt = $pdo->prepare("
         SELECT f.comments, r.rating, u.name as student_name, b.unit_code, b.booking_date 
         FROM feedback f 
         JOIN ratings r ON f.booking_id = r.booking_id 
         JOIN users u ON f.learner_id = u.id 
-        JOIN bookings b ON f.booking_id = b.booking_id 
-        WHERE b.tutor_id = ? 
+        JOIN bookings b ON f.booking_id = b.id 
+        WHERE r.tutor_id = ? 
         ORDER BY b.booking_date DESC
     ");
     $stmt->execute([$tutor_id]);

@@ -19,16 +19,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_report'])) {
     $booking_id = (int)$_POST['booking_id'];
     $academic_remarks = trim($_POST['remarks']);
     $rating_assessment = trim($_POST['assessment']);
+    $grade_achieved = trim($_POST['grade_achieved']); 
 
     try {
-        // Securely fetch the actual learner_id mapped to this booking to prevent manual parameter injection
-        $verifyStmt = $pdo->prepare("SELECT learner_id FROM bookings WHERE booking_id = ? AND tutor_id = ?");
+        // Verification using database-backed primary key 'id' instead of 'booking_id'
+        $verifyStmt = $pdo->prepare("SELECT learner_id FROM bookings WHERE id = ? AND tutor_id = ?");
         $verifyStmt->execute([$booking_id, $tutor_id]);
         $learner_id = $verifyStmt->fetchColumn();
 
         if ($learner_id) {
-            $stmt = $pdo->prepare("INSERT INTO progress_reports (booking_id, tutor_id, learner_id, academic_remarks, performance_assessment) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$booking_id, $tutor_id, $learner_id, $academic_remarks, $rating_assessment]);
+            // Inserts cleanly into your progress_reports schema
+            $stmt = $pdo->prepare("INSERT INTO progress_reports (booking_id, tutor_id, learner_id, academic_remarks, performance_assessment, grade_achieved, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+            $stmt->execute([$booking_id, $tutor_id, $learner_id, $academic_remarks, $rating_assessment, $grade_achieved]);
             
             $message = "Student performance report committed safely!";
             $message_type = 'success';
@@ -46,7 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_report'])) {
 $students_grades = [];
 $past_reports = [];
 try {
-    // Look up historical unit performance metrics submitted by linked learners (Fixed column mapping: booking_id)
     $stmt = $pdo->prepare("
         SELECT DISTINCT u.id as learner_id, u.name, ap.unit_code, ap.grade_point 
         FROM academic_progress ap 
@@ -56,12 +57,11 @@ try {
     $stmt->execute([$tutor_id]);
     $students_grades = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch existing filed progress reports (Fixed column mapping: booking_id)
     $rStmt = $pdo->prepare("
         SELECT pr.*, u.name as student_name, b.unit_code 
         FROM progress_reports pr 
         JOIN users u ON pr.learner_id = u.id 
-        JOIN bookings b ON pr.booking_id = b.booking_id 
+        JOIN bookings b ON pr.booking_id = b.id 
         WHERE pr.tutor_id = ? 
         ORDER BY pr.created_at DESC
     ");
@@ -127,18 +127,36 @@ try {
                         <select name="booking_id" required>
                             <option value="">-- Choose Concluded Active Session --</option>
                             <?php
-                            // Updated condition: Checks for both completed and claimed status tokens
+                            // Pulls student records that have booked this specific tutor where status is completed
                             $bStmt = $pdo->prepare("
-                                SELECT b.booking_id, b.learner_id, u.name, b.unit_code 
+                                SELECT b.id AS booking_id, b.learner_id, u.name, b.unit_code 
                                 FROM bookings b 
                                 JOIN users u ON b.learner_id = u.id 
-                                WHERE b.tutor_id = ? AND b.status IN ('completed', 'claimed')
+                                WHERE b.tutor_id = ? AND b.status = 'completed'
                             ");
                             $bStmt->execute([$tutor_id]);
-                            while($b = $bStmt->fetch(PDO::FETCH_ASSOC)) {
-                                echo "<option value='{$b['booking_id']}'>{$b['name']} ({$b['unit_code']})</option>";
+                            $found_bookings = $bStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                            if (empty($found_bookings)) {
+                                echo "<option value='' disabled>No completed bookings found for your account</option>";
+                            } else {
+                                foreach ($found_bookings as $b) {
+                                    echo "<option value='{$b['booking_id']}'>" . htmlspecialchars($b['name']) . " (" . htmlspecialchars($b['unit_code']) . ")</option>";
+                                }
                             }
                             ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="font-size: 13px; font-weight: 600; color: var(--slate);">Grade Achieved</label>
+                        <select name="grade_achieved" required>
+                            <option value="">-- Select Grade Matrix Level --</option>
+                            <option value="A">Grade A (70% - 100%)</option>
+                            <option value="B">Grade B (60% - 69%)</option>
+                            <option value="C">Grade C (50% - 59%)</option>
+                            <option value="D">Grade D (40% - 49%)</option>
+                            <option value="E/F">Grade E/F (0% - 39%)</option>
                         </select>
                     </div>
 
@@ -190,7 +208,8 @@ try {
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
                                 <span style="font-size: 14px; color: var(--navy);">
                                     Student: <strong><?php echo htmlspecialchars($pr['student_name']); ?></strong> <br>
-                                    Unit Code: <span style="font-weight: 600;"><?php echo htmlspecialchars($pr['unit_code']); ?></span>
+                                    Unit Code: <span style="font-weight: 600;"><?php echo htmlspecialchars($pr['unit_code']); ?></span> <br>
+                                    Grade Achieved: <span style="color: #10b981; font-weight: bold;">Grade <?php echo htmlspecialchars($pr['grade_achieved'] ?? 'N/A'); ?></span>
                                 </span>
                                 <span style="font-size: 11px; background: #f1f5f9; color: var(--navy); padding: 4px 8px; border-radius: 12px; font-weight: 700; text-transform: uppercase; white-space: nowrap;">
                                     <?php echo htmlspecialchars($pr['performance_assessment']); ?>
