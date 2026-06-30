@@ -34,15 +34,20 @@ try {
     }
 
     // =========================================================================
-    // 3. BACKEND RETRIEVAL PROCESSOR & RATING FILTERS
+    // 3. BACKEND RETRIEVAL PROCESSOR & RATING FILTERS (With feedback table joined)
     // =========================================================================
     if (isset($_GET['rating_filter']) && $_GET['rating_filter'] !== "") {
         $filter_rating = intval($_GET['rating_filter']);
         
         $stmt = $pdo->prepare("
-            SELECT r.id, r.rating, r.comment, u.name as user_name
+            SELECT r.id, r.rating, f.comments as comment, b.unit_code,
+                   u_student.name as student_name,
+                   u_tutor.name as tutor_name
             FROM ratings r
-            JOIN users u ON r.user_id = u.id
+            JOIN bookings b ON r.booking_id = b.id
+            JOIN users u_student ON b.learner_id = u_student.id
+            JOIN users u_tutor ON b.tutor_id = u_tutor.id
+            LEFT JOIN feedback f ON r.booking_id = f.booking_id
             WHERE r.rating = ?
             ORDER BY r.id DESC
         ");
@@ -50,9 +55,14 @@ try {
         $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $stmt = $pdo->query("
-            SELECT r.id, r.rating, r.comment, u.name as user_name
+            SELECT r.id, r.rating, f.comments as comment, b.unit_code,
+                   u_student.name as student_name,
+                   u_tutor.name as tutor_name
             FROM ratings r
-            JOIN users u ON r.user_id = u.id
+            JOIN bookings b ON r.booking_id = b.id
+            JOIN users u_student ON b.learner_id = u_student.id
+            JOIN users u_tutor ON b.tutor_id = u_tutor.id
+            LEFT JOIN feedback f ON r.booking_id = f.booking_id
             ORDER BY r.id DESC
         ");
         $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -124,7 +134,9 @@ function renderStars(int $score): string {
                 <thead>
                     <tr>
                         <th>Review ID</th>
-                        <th>User Name</th>
+                        <th>Student Name (Reviewer)</th>
+                        <th>Tutor Assigned</th>
+                        <th>Unit Code</th>
                         <th>Numerical Score</th>
                         <th>Visual Rating Matrix</th>
                         <th>Written Comment Observation</th>
@@ -133,7 +145,7 @@ function renderStars(int $score): string {
                 <tbody>
                     <?php if (empty($reviews_list)): ?>
                         <tr>
-                            <td colspan="5" style="text-align: center; font-style: italic; color: #475569; padding: 20px;">
+                            <td colspan="7" style="text-align: center; font-style: italic; color: #475569; padding: 20px;">
                                 No system review entries match the selected filters context.
                             </td>
                         </tr>
@@ -141,7 +153,9 @@ function renderStars(int $score): string {
                         <?php foreach ($reviews_list as $row): ?>
                             <tr>
                                 <td>#RAT-<?php echo $row['id']; ?></td>
-                                <td><strong><?php echo htmlspecialchars($row['user_name']); ?></strong></td>
+                                <td><strong><?php echo htmlspecialchars($row['student_name']); ?></strong></td>
+                                <td><?php echo htmlspecialchars($row['tutor_name']); ?></td>
+                                <td><code><?php echo htmlspecialchars($row['unit_code']); ?></code></td>
                                 <td><code><?php echo number_format($row['rating'], 0); ?> / 5</code></td>
                                 <td style="color: #f39c12; font-size: 16px; letter-spacing: 1px; white-space: nowrap;">
                                     <?php echo renderStars((int)$row['rating']); ?>

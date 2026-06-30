@@ -127,12 +127,12 @@ try {
                         <select name="booking_id" required>
                             <option value="">-- Choose Concluded Active Session --</option>
                             <?php
-                            // Pulls student records that have booked this specific tutor where status is completed
+                            // Updated targeting column from b.status to b.progress to match database structure
                             $bStmt = $pdo->prepare("
                                 SELECT b.id AS booking_id, b.learner_id, u.name, b.unit_code 
                                 FROM bookings b 
                                 JOIN users u ON b.learner_id = u.id 
-                                WHERE b.tutor_id = ? AND b.status = 'completed'
+                                WHERE b.tutor_id = ? AND b.progress = 'completed'
                             ");
                             $bStmt->execute([$tutor_id]);
                             $found_bookings = $bStmt->fetchAll(PDO::FETCH_ASSOC);

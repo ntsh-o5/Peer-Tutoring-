@@ -20,53 +20,76 @@ $selected_record = null;
 $stats = [
     'total_records'     => 0,
     'improved_learners' => 0,
-    'avg_gpa'           => '0.00'
+    'top_performers'    => 0
 ];
 
+/**
+ * Helper function to convert Letter Grades to numeric weights for comparison
+ */
+function getGradeWeight(string $grade): int {
+    $grade = strtoupper(trim($grade));
+    $weights = ['A' => 5, 'B' => 4, 'C' => 3, 'D' => 2, 'E' => 1, 'F' => 0];
+    return $weights[$grade] ?? 0;
+}
+
 try {
+    // =========================================================================
     // 2. DYNAMIC SYSTEM-WIDE METRICS AGGREGATION
+    // =========================================================================
+    
     // Total Records
     $totalStmt = $pdo->query("SELECT COUNT(*) FROM academic_progress");
     $stats['total_records'] = (int)$totalStmt->fetchColumn();
 
-    // Improved Learners (Where current grade point is strictly higher than initial progress benchmarks)
-    $improvedStmt = $pdo->query("SELECT COUNT(*) FROM academic_progress WHERE grade_point > 2.00");
-    $stats['improved_learners'] = (int)$improvedStmt->fetchColumn();
+    // Fetch grades raw for metrics calculation due to alphanumeric format
+    $metricsStmt = $pdo->query("SELECT grade_before, grade_after FROM academic_progress");
+    $allGrades = $metricsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Average Performance Standing
-    $avgGpaStmt = $pdo->query("SELECT AVG(grade_point) FROM academic_progress");
-    $avgGpaVal = $avgGpaStmt->fetchColumn();
-    if ($avgGpaVal) {
-        $stats['avg_gpa'] = number_format((float)$avgGpaVal, 2);
+    foreach ($allGrades as $g) {
+        $w_before = getGradeWeight($g['grade_before']);
+        $w_after  = getGradeWeight($g['grade_after']);
+        
+        // Improved: Weight After is greater than Weight Before
+        if ($w_after > $w_before) {
+            $stats['improved_learners']++;
+        }
+        // Top Performers: Maintained or achieved an 'A' grade after
+        if (strtoupper(trim($g['grade_after'])) === 'A') {
+            $stats['top_performers']++;
+        }
     }
 
+    // =========================================================================
     // 3. CAPTURE AND SANITIZE SEARCH VALUES (PostgreSQL Case-Insensitive)
+    // =========================================================================
     if (isset($_GET['search']) && trim($_GET['search']) !== "") {
         $search_query = trim($_GET['search']);
         $stmt = $pdo->prepare("
-            SELECT ap.id, ap.unit_code, ap.grade_point, ap.remarks, ap.created_at, u.name as learner_name
+            SELECT ap.id, ap.unit_code, ap.grade_before, ap.grade_after, ap.proof_before, ap.proof_after, u.name as learner_name
             FROM academic_progress ap
             JOIN users u ON ap.learner_id = u.id
             WHERE LOWER(u.name) LIKE LOWER(?) OR LOWER(ap.unit_code) LIKE LOWER(?)
-            ORDER BY ap.created_at DESC
+            ORDER BY ap.id DESC
         ");
         $stmt->execute(["%$search_query%", "%$search_query%"]);
         $grade_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $stmt = $pdo->query("
-            SELECT ap.id, ap.unit_code, ap.grade_point, ap.remarks, ap.created_at, u.name as learner_name
+            SELECT ap.id, ap.unit_code, ap.grade_before, ap.grade_after, ap.proof_before, ap.proof_after, u.name as learner_name
             FROM academic_progress ap
             JOIN users u ON ap.learner_id = u.id
-            ORDER BY ap.created_at DESC
+            ORDER BY ap.id DESC
         ");
         $grade_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // =========================================================================
     // 4. DETAILED INSPECTION ROW SELECTION OVERVIEW HANDLER
+    // =========================================================================
     if (isset($_GET['view_id'])) {
         $selected_grade_id = (int)$_GET['view_id'];
         $viewStmt = $pdo->prepare("
-            SELECT ap.id, ap.unit_code, ap.grade_point, ap.remarks, ap.created_at, u.name as learner_name
+            SELECT ap.id, ap.unit_code, ap.grade_before, ap.grade_after, ap.proof_before, ap.proof_after, u.name as learner_name
             FROM academic_progress ap
             JOIN users u ON ap.learner_id = u.id
             WHERE ap.id = ?
@@ -104,13 +127,13 @@ try {
             </div>
 
             <div class="card">
-                <h3>Satisfactory Standings</h3>
+                <h3>Improved Standings</h3>
                 <p><?php echo number_format($stats['improved_learners']); ?></p>
             </div>
 
             <div class="card">
-                <h3>System Average Grade Point</h3>
-                <p style="color: #10b981;"><?php echo $stats['avg_gpa']; ?></p>
+                <h3>Current Top Performers (A)</h3>
+                <p style="color: #10b981;"><?php echo number_format($stats['top_performers']); ?></p>
             </div>
         </section>
 
@@ -133,32 +156,38 @@ try {
                         <th>Record ID</th>
                         <th>Learner Name</th>
                         <th>Unit Code</th>
-                        <th>Current Grade Point Metric</th>
-                        <th>Logged Performance Benchmark</th>
+                        <th>Initial Grade</th>
+                        <th>Current Grade</th>
+                        <th>Performance Trend</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($grade_records)): ?>
                         <tr>
-                            <td colspan="6" style="text-align: center; font-style: italic; color: #475569; padding: 20px;">
+                            <td colspan="7" style="text-align: center; font-style: italic; color: #475569; padding: 20px;">
                                 No academic progress grading profiles match the active search criteria.
                             </td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($grade_records as $row): ?>
+                            <?php 
+                                $w_b = getGradeWeight($row['grade_before']);
+                                $w_a = getGradeWeight($row['grade_after']);
+                            ?>
                             <tr>
                                 <td>#<?php echo $row['id']; ?></td>
                                 <td><?php echo htmlspecialchars($row['learner_name']); ?></td>
                                 <td><strong><?php echo htmlspecialchars($row['unit_code']); ?></strong></td>
-                                <td><span style="font-weight:bold; color:#0f2038;"><?php echo number_format($row['grade_point'], 2); ?></span></td>
+                                <td><span style="color:#64748b;"><?php echo htmlspecialchars($row['grade_before']); ?></span></td>
+                                <td><span style="font-weight:bold; color:#0f2038;"><?php echo htmlspecialchars($row['grade_after']); ?></span></td>
                                 <td>
-                                    <?php if ($row['grade_point'] >= 3.00): ?>
-                                        <span class="status-badge approved">Excellent</span>
-                                    <?php elseif ($row['grade_point'] >= 2.00): ?>
-                                        <span class="status-badge pending">Stable</span>
+                                    <?php if ($w_a > $w_b): ?>
+                                        <span class="status-badge approved">▲ Improved</span>
+                                    <?php elseif ($w_a === $w_b): ?>
+                                        <span class="status-badge pending">● Stable</span>
                                     <?php else: ?>
-                                        <span class="status-badge rejected">Needs Review</span>
+                                        <span class="status-badge rejected">▼ Regressed</span>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -177,13 +206,30 @@ try {
                 <p><strong>Record Reference ID:</strong> #<?php echo $selected_record['id']; ?></p>
                 <p><strong>Learner Target Profile:</strong> <?php echo htmlspecialchars($selected_record['learner_name']); ?></p>
                 <p><strong>Unit of Study:</strong> <?php echo htmlspecialchars($selected_record['unit_code']); ?></p>
-                <p><strong>Calculated Point Scale:</strong> <?php echo number_format($selected_record['grade_point'], 2); ?></p>
-                <p><strong>Submission Entry Date:</strong> <?php echo date('F d, Y - H:i', strtotime($selected_record['created_at'])); ?></p>
+                <p><strong>Initial Benchmarked Grade:</strong> <?php echo htmlspecialchars($selected_record['grade_before']); ?></p>
+                <p><strong>Post-Evaluation Grade:</strong> <?php echo htmlspecialchars($selected_record['grade_after']); ?></p>
                 <br>
-                <p><strong>Instructor Observational Evaluation Summary Remarks:</strong></p>
-                <blockquote style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius:6px; margin:0; color:#475569; font-style:italic;">
-                    "<?php echo htmlspecialchars($selected_record['remarks'] ?: 'No structural assessment logs written for this transaction tracking sequence.'); ?>"
-                </blockquote>
+                
+                <h3>Verification Documents</h3>
+                <div style="display: flex; gap: 20px; margin-top: 10px;">
+                    <div>
+                        <p><strong>Initial Grade Proof Document:</strong></p>
+                        <?php if (!empty($selected_record['proof_before'])): ?>
+                            <a href="<?php echo htmlspecialchars($selected_record['proof_before']); ?>" target="_blank" class="view-btn" style="text-decoration:none; background-color:#475569;">Open Proof Before</a>
+                        <?php else: ?>
+                            <span style="font-style: italic; color: #94a3b8;">No initial proof uploaded.</span>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <div>
+                        <p><strong>Updated Grade Proof Document:</strong></p>
+                        <?php if (!empty($selected_record['proof_after'])): ?>
+                            <a href="<?php echo htmlspecialchars($selected_record['proof_after']); ?>" target="_blank" class="view-btn" style="text-decoration:none; background-color:#475569;">Open Proof After</a>
+                        <?php else: ?>
+                            <span style="font-style: italic; color: #94a3b8;">No subsequent proof uploaded.</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
         <?php endif; ?>
 

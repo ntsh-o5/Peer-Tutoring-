@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_booking'])) {
 }
 
 // 2. Handle Marking a Session as Completed
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_complete_session'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && issetPOST['action_complete_session']) {
     $booking_id = (int)$_POST['booking_id'];
     
     try {
@@ -249,10 +249,6 @@ try {
                     <a href="bookings.php" class="hub-tile" style="border-left: 4px solid var(--primary-navy);">
                         <h4>📥 Booking Controls Pipeline</h4>
                         <p>Process inbound invitations, accept assignments, cancel sessions, or complete classes.</p>
-                    </a>
-                    <a href="booking_history.php" class="hub-tile">
-                        <h4>📜 Booking History Log</h4>
-                        <p>Review a complete record index log of all historical past and processed peer allocations.</p>
                     </a>
                     <a href="schedule.php" class="hub-tile">
                         <h4>🗓️ Update Availability</h4>
