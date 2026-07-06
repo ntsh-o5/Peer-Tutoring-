@@ -13,9 +13,9 @@ if (isset($result['ResponseCode']) && $result['ResponseCode'] == '0') {
     $checkoutId = $result['CheckoutRequestID'];
 
     // Save checkout ID to payments table so callback can match it
-    $stmt = $pdo->prepare("INSERT INTO payments (user_id, amount, transaction_ref, status, created_at) 
-                           VALUES (?, 350, ?, 'pending', NOW())");
-    $stmt->execute([$userId, $checkoutId]);
+    $stmt = $pdo->prepare("INSERT INTO payments (user_id, booking_id, amount, transaction_ref, status, created_at) 
+                       VALUES (?, ?, 500, ?, 'pending', NOW())");
+$stmt->execute([$userId, $bookingId, $checkoutId]);
 
     echo json_encode(['success' => true, 'message' => 'Check your phone for the M-Pesa PIN prompt.']);
 } else {

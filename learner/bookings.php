@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
         $booking_id = (int)$_POST['booking_id'];
         try {
             // Fixed column references from 'id' to 'booking_id'
-            $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE booking_id = ? AND learner_id = ?");
+            $stmt = $pdo->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND learner_id = ?");
             $stmt->execute([$booking_id, $learner_id]);
             $message = "Session successfully cancelled.";
         } catch (PDOException $e) {
@@ -57,7 +57,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
 $history = [];
 try {
     // Fixed column reference from b.id to b.booking_id
-    $stmt = $pdo->prepare("SELECT b.id as booking_id, b.unit_code, b.booking_date, b.status, u.name as tutor_name FROM bookings b JOIN users u ON b.tutor_id = u.id WHERE b.learner_id = ? ORDER BY b.booking_date DESC");
+    $stmt = $pdo->prepare("
+    SELECT b.id as booking_id, b.unit_code, b.booking_date, b.status, u.name as tutor_name,
+    EXISTS(SELECT 1 FROM payments p WHERE p.booking_id = b.id AND p.status = 'completed') as is_paid
+    FROM bookings b 
+    JOIN users u ON b.tutor_id = u.id 
+    WHERE b.learner_id = ? 
+    ORDER BY b.booking_date DESC
+");
     $stmt->execute([$learner_id]);
     $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -124,33 +131,33 @@ try {
                                 </span>
                             </td>
                             <td>
-                                <?php if ($status === 'pending' || $status === 'approved'): ?>
-                                    <!-- Modification workspace tools -->
-                                    <form method="POST" action="bookings.php?action=reschedule" style="display:inline-block;">
-                                        <input type="hidden" name="booking_id" value="<?php echo $row['booking_id']; ?>">
-                                        <input type="datetime-local" name="new_booking_date" required style="padding:4px; font-size:11px;">
-                                        <button type="submit" class="btn-sm" style="background: #64748b;">Shift</button>
-                                    </form>
-                                    <!-- M-Pesa Payment Button -->
-                                <?php if ($status === 'approved'): ?>
-                                    <button
-                                    class="btn-sm"
-                                    style="background: #1D9E75; color: white;"
-                                    onclick="openPayModal(<?php echo $row['booking_id']; ?>, <?php echo $learner_id; ?>)">
-                                    Pay KES 350
-                                    </button>
-                                <?php endif; ?>
-                                    <form method="POST" action="bookings.php?action=cancel" style="display:inline-block;" onsubmit="return confirm('Are you sure you want to cancel this peer session?');">
-                                        <input type="hidden" name="booking_id" value="<?php echo $row['booking_id']; ?>">
-                                        <button type="submit" class="btn-sm" style="background: #ef4444;">Cancel</button>
-                                    </form>
-                                <?php elseif ($status === 'completed'): ?>
-                                    <!-- Route directly to ratings.php or feedback handlers -->
-                                    <a href="ratings.php?booking_id=<?php echo $row['booking_id']; ?>" class="btn-sm" style="background: #f59e0b;">Leave Review</a>
-                                <?php else: ?>
-                                    <span style="color: var(--slate); font-size: 12px;">No Actions Available</span>
-                                <?php endif; ?>
-                            </td>
+    <?php if ($status === 'pending' || $status === 'approved'): ?>
+        <form method="POST" action="bookings.php?action=reschedule" style="display:inline-block;">
+            <input type="hidden" name="booking_id" value="<?php echo $row['booking_id']; ?>">
+            <input type="datetime-local" name="new_booking_date" required style="padding:4px; font-size:11px;">
+            <button type="submit" class="btn-sm" style="background: #64748b;">Shift</button>
+        </form>
+
+        <?php if ($status === 'approved' && !$row['is_paid']): ?>
+            <button class="btn-sm" style="background: #1D9E75; color: white;"
+                onclick="openPayModal(<?php echo $row['booking_id']; ?>, <?php echo $learner_id; ?>)">
+                Pay KES 500
+            </button>
+        <?php elseif ($status === 'approved' && $row['is_paid']): ?>
+            <span style="color:#10b981; font-size:12px; font-weight:600;">✓ Paid</span>
+        <?php endif; ?>
+
+        <form method="POST" action="bookings.php?action=cancel" style="display:inline-block;" onsubmit="return confirm('Are you sure you want to cancel this peer session?');">
+            <input type="hidden" name="booking_id" value="<?php echo $row['booking_id']; ?>">
+            <button type="submit" class="btn-sm" style="background: #ef4444;">Cancel</button>
+        </form>
+
+    <?php elseif ($status === 'completed'): ?>
+        <a href="rating.php?booking_id=<?php echo $row['booking_id']; ?>" class="btn-sm" style="background: #f59e0b;">Leave Review</a>
+    <?php else: ?>
+        <span style="color: var(--slate); font-size: 12px;">No Actions Available</span>
+    <?php endif; ?>
+</td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -161,7 +168,7 @@ try {
 <div id="pay-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
   <div style="background:white; border-radius:8px; padding:30px; width:350px;">
     <h3 style="margin:0 0 10px;">Pay with M-Pesa</h3>
-    <p style="color:#666; margin:0 0 20px;">Session fee: <strong>KES 350</strong></p>
+    <p style="color:#666; margin:0 0 20px;">Session fee: <strong>KES 500</strong></p>
     
     <input type="hidden" id="modal-booking-id">
     <input type="hidden" id="modal-user-id">

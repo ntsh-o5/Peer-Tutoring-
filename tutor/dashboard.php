@@ -8,12 +8,13 @@ if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !
     exit;
 }
 
-if (!isset($_SESSION['is_verified']) || $_SESSION['is_verified'] !== true) {
-    header("Location: onboarding.php"); // Redirect to upload credentials
+require_once '../config/database.php';
+$verifyCheck = $pdo->prepare("SELECT COUNT(*) FROM tutor_credentials WHERE tutor_id = ? AND submission_status = 'approved'");
+$verifyCheck->execute([$_SESSION['user_id']]);
+if ((int)$verifyCheck->fetchColumn() === 0) {
+    header("Location: onboarding.php");
     exit;
 }
-
-require_once '../config/database.php';
 
 $tutor_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'Instructor';
 $tutor_id = $_SESSION['user_id'];
@@ -28,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_booking'])) {
     $new_status = ($action === 'accept') ? 'approved' : 'rejected';
     
     try {
-        $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE booking_id = ? AND tutor_id = ? AND status = 'pending'");
+        $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ? AND tutor_id = ? AND status = 'pending'");
         $updateStmt->execute([$new_status, $booking_id, $tutor_id]);
         
         if ($updateStmt->rowCount() > 0) {
@@ -50,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_complete_sessi
     $booking_id = (int)$_POST['booking_id'];
     
     try {
-        $completeStmt = $pdo->prepare("UPDATE bookings SET status = 'completed' WHERE booking_id = ? AND tutor_id = ? AND status = 'approved'");
+        $completeStmt = $pdo->prepare("UPDATE bookings SET status = 'completed' WHERE id = ? AND tutor_id = ? AND status = 'approved'");
         $completeStmt->execute([$booking_id, $tutor_id]);
         
         if ($completeStmt->rowCount() > 0) {
@@ -71,12 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_complete_sessi
 $pending_requests = [];
 try {
     $reqStmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, b.booking_date, u.name as student_name 
-        FROM bookings b
-        JOIN users u ON b.learner_id = u.id
-        WHERE b.tutor_id = ? AND b.status = 'pending'
-        ORDER BY b.booking_date ASC
-    ");
+    SELECT b.id AS booking_id, b.unit_code, b.booking_date, u.name as student_name 
+    FROM bookings b
+    JOIN users u ON b.learner_id = u.id
+    WHERE b.tutor_id = ? AND b.status = 'pending'
+    ORDER BY b.booking_date ASC
+");
     $reqStmt->execute([$tutor_id]);
     $pending_requests = $reqStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -95,17 +96,28 @@ try {
         }
     }
 
-    $ratingStmt = $pdo->prepare("SELECT AVG(r.rating) as avg_score FROM ratings r JOIN bookings b ON r.booking_id = b.booking_id WHERE b.tutor_id = ?");
+    $ratingStmt = $pdo->prepare("SELECT AVG(r.rating) as avg_score FROM ratings r JOIN bookings b ON r.booking_id = b.id WHERE b.tutor_id = ?");
     $ratingStmt->execute([$tutor_id]);
     $avgRating = $ratingStmt->fetchColumn();
     if ($avgRating) {
         $metrics['rating'] = number_format($avgRating, 1);
     }
 
+    // ↓↓↓ REPLACE THESE 3 LINES ↓↓↓
     $earningsStmt = $pdo->prepare("SELECT COUNT(*) FROM bookings WHERE tutor_id = ? AND status = 'completed'");
     $earningsStmt->execute([$tutor_id]);
     $completedCount = (int)$earningsStmt->fetchColumn();
     $metrics['earnings'] = $completedCount * 500;
+    // ↑↑↑ WITH THIS ↑↑↑
+    $earningsStmt = $pdo->prepare("
+        SELECT COALESCE(SUM(p.amount), 0) 
+        FROM payments p
+        JOIN bookings b ON p.booking_id = b.id
+        WHERE b.tutor_id = ? AND p.status = 'completed'
+    ");
+    $earningsStmt->execute([$tutor_id]);
+    $metrics['earnings'] = (float)$earningsStmt->fetchColumn();
+
 } catch (PDOException $e) {
     error_log("Tutor dashboard aggregation exception: " . $e->getMessage());
 }
@@ -114,17 +126,34 @@ try {
 $upcoming_classes = [];
 try {
     $upStmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, b.booking_date, u.name as student_name 
-        FROM bookings b 
-        JOIN users u ON b.learner_id = u.id 
-        WHERE b.tutor_id = ? AND b.status = 'approved' 
-        ORDER BY b.booking_date ASC 
-        LIMIT 5
-    ");
+    SELECT b.id AS booking_id, b.unit_code, b.booking_date, u.name as student_name 
+    FROM bookings b 
+    JOIN users u ON b.learner_id = u.id 
+    WHERE b.tutor_id = ? AND b.status = 'approved' 
+    ORDER BY b.booking_date ASC 
+    LIMIT 5
+");
     $upStmt->execute([$tutor_id]);
     $upcoming_classes = $upStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Upcoming query error: " . $e->getMessage());
+}
+// 6. Fetch payments received for this tutor's bookings
+$payments_received = [];
+try {
+    $payStmt = $pdo->prepare("
+        SELECT p.amount, p.transaction_ref, p.paid_at, b.unit_code, u.name as student_name
+        FROM payments p
+        JOIN bookings b ON p.booking_id = b.id
+        JOIN users u ON b.learner_id = u.id
+        WHERE b.tutor_id = ? AND p.status = 'completed'
+        ORDER BY p.paid_at DESC
+        LIMIT 5
+    ");
+    $payStmt->execute([$tutor_id]);
+    $payments_received = $payStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    error_log("Payments received query error: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
@@ -237,6 +266,30 @@ try {
             </div>
         </div>
 
+        <div class="panel-box" style="margin-bottom: 30px; width: 100%; box-sizing: border-box;">
+    <h2 style="color: var(--primary-navy); border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-top: 0;">
+        Payments Received
+    </h2>
+    <?php if (empty($payments_received)): ?>
+        <p style="color: var(--slate-gray); font-size: 14px; font-style: italic; padding: 10px 0;">No payments received yet.</p>
+    <?php else: ?>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;">
+            <?php foreach ($payments_received as $p): ?>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">
+                    <div>
+                        <strong style="color: var(--primary-navy);"><?php echo htmlspecialchars($p['student_name']); ?></strong>
+                        <span style="color: var(--slate-gray); font-size: 13px;"> — <?php echo htmlspecialchars($p['unit_code']); ?></span>
+                        <div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">
+                            Receipt: <?php echo htmlspecialchars($p['transaction_ref']); ?> · <?php echo date('M d, Y H:i', strtotime($p['paid_at'])); ?>
+                        </div>
+                    </div>
+                    <strong style="color: #10b981;">KES <?php echo number_format($p['amount'], 2); ?></strong>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
         <div class="layout-split">
             <div class="panel-box">
                 <h2>Functional Modules Matrix</h2>
@@ -265,6 +318,10 @@ try {
                         <h4>💬 Evaluations Received</h4>
                         <p>Read detailed reviews, performance ratings, and text critiques from students.</p>
                     </a>
+                     <a href="onboarding.php" class="hub-tile">
+        <h4>📄 Submit New Unit</h4>
+        <p>Add another course unit to your verified teaching credentials.</p>
+    </a>
                 </div>
             </div>
 

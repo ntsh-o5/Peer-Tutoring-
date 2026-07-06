@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
 
         // 1. Trace the tutor reference tied to this booking (Updated column from 'id' to 'booking_id')
-        $bStmt = $pdo->prepare("SELECT tutor_id FROM bookings WHERE booking_id = ? AND learner_id = ?");
+        $bStmt = $pdo->prepare("SELECT tutor_id FROM bookings WHERE id = ? AND learner_id = ?");
         $bStmt->execute([$booking_id, $learner_id]);
         $tutor_id = $bStmt->fetchColumn();
 

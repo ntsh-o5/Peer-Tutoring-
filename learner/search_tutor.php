@@ -1,4 +1,4 @@
-<?php
+       <?php
 // learner/search_tutor.php
 session_start();
 if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !== 'learner') {
@@ -13,19 +13,20 @@ $tutors = [];
 
 try {
     $query = "
-        SELECT DISTINCT u.id, u.name, u.email
-        FROM users u
-        LEFT JOIN tutor_credentials tc ON u.id = tc.tutor_id
-        WHERE LOWER(u.role) = 'tutor'
-        AND LOWER(tc.submission_status) = 'approved'
-    ";
+    SELECT DISTINCT u.id, u.name, u.email, tp.hourly_rate
+    FROM users u
+    LEFT JOIN tutor_credentials tc ON u.id = tc.tutor_id
+    LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
+    WHERE LOWER(u.role) = 'tutor'
+    AND LOWER(tc.submission_status) = 'approved'
+";
 
     if (!empty($search_query)) {
         $query .= " AND LOWER(tc.unit_code) LIKE ?";
         $stmt = $pdo->prepare($query);
-        $stmt->execute(["%$search_query%"]);
+        $stmt->execute(["%" . strtolower($search_query) . "%"]);
     } else {
-        $stmt = $pdo->prepare($query . " LIMIT 12");
+       $stmt = $pdo->prepare($query . " LIMIT 12");
         $stmt->execute();
     }
 

@@ -14,6 +14,7 @@ $learner_id = $_SESSION['user_id'];
 
 // Global metrics engine configurations
 $metrics = ['completed' => 0, 'scheduled' => 0, 'gpa' => '0.00', 'payment_status' => 'Pending'];
+$unread_alerts_count = 0; // ADD THIS LINE
 
 try {
     // 1. Calculate Active and Completed booking metrics safely
@@ -31,7 +32,20 @@ try {
     }
 
     // 2. Real-Time Dynamic Aggregate GPA Calculation Engine
-    $gpaStmt = $pdo->prepare("SELECT AVG(grade_point) as computed_gpa FROM academic_progress WHERE learner_id = ?");
+    $gpaStmt = $pdo->prepare("
+    SELECT AVG(
+        CASE grade_after
+            WHEN 'A' THEN 4.00
+            WHEN 'B+' THEN 3.50
+            WHEN 'B' THEN 3.00
+            WHEN 'C+' THEN 2.50
+            WHEN 'C' THEN 2.00
+            ELSE NULL
+        END
+    ) as computed_gpa
+    FROM academic_progress 
+    WHERE learner_id = ?
+");
     $gpaStmt->execute([$learner_id]);
     $gpaResult = $gpaStmt->fetch(PDO::FETCH_ASSOC);
     
@@ -102,25 +116,10 @@ try {
             </div>
         </header>
 
-        <?php if (strtolower($metrics['payment_status']) !== 'completed'): ?>
-            <div class="pay-banner">
-                <div>
-                    <strong>Operational Access Fee Pending:</strong> Your institutional system subscription parameters are restricted. Please clear your platform access dues to secure ongoing bookings.
-                </div>
-                <a href="pay_fee.php" style="background: #d97706; color: white; text-decoration: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 13px;">Settle Balance</a>
-            </div>
-        <?php endif; ?>
-
         <section class="stats-grid">
             <div class="stat-card"><h3>Active Bookings</h3><p><?php echo $metrics['scheduled']; ?></p></div>
             <div class="stat-card"><h3>Completed Horizons</h3><p><?php echo $metrics['completed']; ?></p></div>
             <div class="stat-card"><h3>Academic GPA Standing</h3><p style="color: #10b981;"><?php echo $metrics['gpa']; ?></p></div>
-            <div class="stat-card">
-                <h3>Subscription Status</h3>
-                <p style="color: <?php echo strtolower($metrics['payment_status']) === 'completed' ? '#10b981' : '#ef4444'; ?>; font-size: 18px; margin-top: 12px;">
-                    <?php echo strtoupper($metrics['payment_status']); ?>
-                </p>
-            </div>
         </section>
 
         <h2>Functional Modules</h2>
@@ -141,14 +140,9 @@ try {
                 <p>Log your completed terminal course scores, update performance metrics, and audit your aggregate GPA trends.</p>
             </a>
 
-            <a href="rating.php" class="hub-tile">
+            <a href="bookings.php" class="hub-tile">
                 <h3>★ Ratings & Feedback Panel</h3>
                 <p>Provide review scores and log constructive analytical evaluations for peer instructors following closed sessions.</p>
-            </a>
-
-            <a href="pay_fee.php" class="hub-tile" style="border-left: 4px solid #d97706;">
-                <h3>💳 Fee Ledger & Billing</h3>
-                <p>Process your platform service operational invoice, review outstanding premium dues, or view receipts.</p>
             </a>
 
         </div>

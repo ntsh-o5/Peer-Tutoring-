@@ -12,22 +12,23 @@ $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Normalizing unit codes to uppercase automatically for matrix matching
-    $unit_code = strtoupper(trim($_POST['unit_code']));
-    $grade_point = (float)$_POST['grade_point'];
+$unit_code = strtoupper(trim($_POST['unit_code']));
+$grade_before = trim($_POST['grade_before']);
+$grade_after = trim($_POST['grade_after']);
 
-    try {
-        $stmt = $pdo->prepare("INSERT INTO academic_progress (learner_id, unit_code, grade_point) VALUES (?, ?, ?)");
-        $stmt->execute([$learner_id, $unit_code, $grade_point]);
-        $msg = "Grade record tracked successfully!";
-    } catch (PDOException $e) {
-        $msg = "Error mapping score: " . $e->getMessage();
-    }
+try {
+    $stmt = $pdo->prepare("INSERT INTO academic_progress (learner_id, unit_code, grade_before, grade_after) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$learner_id, $unit_code, $grade_before, $grade_after]);
+    $msg = "Grade record tracked successfully!";
+} catch (PDOException $e) {
+    $msg = "Error mapping score: " . $e->getMessage();
+}
 }
 
 // Fetch existing profile evaluation logs
 $grades = [];
 try {
-    $stmt = $pdo->prepare("SELECT unit_code, grade_point, recorded_at FROM academic_progress WHERE learner_id = ? ORDER BY recorded_at DESC");
+    $stmt = $pdo->prepare("SELECT unit_code, grade_before, grade_after, recorded_at FROM academic_progress WHERE learner_id = ? ORDER BY recorded_at DESC");
     $stmt->execute([$learner_id]);
     $grades = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
@@ -68,22 +69,32 @@ try {
             <?php endif; ?>
             
             <form method="POST" action="grades.php">
-                <div class="form-row">
-                    <label>Course Unit Code</label>
-                    <input type="text" name="unit_code" placeholder="e.g. ICS 2201" required>
-                </div>
-                <div class="form-group form-row">
-                    <label>Achieved Score Metric</label>
-                    <select name="grade_point" required>
-                        <option value="4.00">Grade A (4.00 GP)</option>
-                        <option value="3.50">Grade B+ (3.50 GP)</option>
-                        <option value="3.00">Grade B (3.00 GP)</option>
-                        <option value="2.50">Grade C+ (2.50 GP)</option>
-                        <option value="2.00">Grade C (2.00 GP)</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn">Submit Matrix</button>
-            </form>
+    <div class="form-row">
+        <label>Course Unit Code</label>
+        <input type="text" name="unit_code" placeholder="e.g. ICS 2201" required>
+    </div>
+    <div class="form-group form-row">
+        <label>Grade Before Tutoring</label>
+        <select name="grade_before" required>
+            <option value="A">Grade A (4.00 GP)</option>
+            <option value="B+">Grade B+ (3.50 GP)</option>
+            <option value="B">Grade B (3.00 GP)</option>
+            <option value="C+">Grade C+ (2.50 GP)</option>
+            <option value="C">Grade C (2.00 GP)</option>
+        </select>
+    </div>
+    <div class="form-group form-row">
+        <label>Grade After Tutoring</label>
+        <select name="grade_after" required>
+            <option value="A">Grade A (4.00 GP)</option>
+            <option value="B+">Grade B+ (3.50 GP)</option>
+            <option value="B">Grade B (3.00 GP)</option>
+            <option value="C+">Grade C+ (2.50 GP)</option>
+            <option value="C">Grade C (2.00 GP)</option>
+        </select>
+    </div>
+    <button type="submit" class="btn">Submit Matrix</button>
+</form>
         </div>
 
         <div class="panel">
@@ -105,7 +116,7 @@ try {
                         <?php foreach ($grades as $g): ?>
                             <tr>
                                 <td><strong><?php echo htmlspecialchars($g['unit_code']); ?></strong></td>
-                                <td style="color:#10b981; font-weight:bold;"><?php echo number_format($g['grade_point'], 2); ?></td>
+                                <td style="color:#10b981; font-weight:bold;"><?php echo htmlspecialchars($g['grade_before']); ?></td>
                                 <td style="color: var(--slate);"><?php echo date('M d, Y - H:i', strtotime($g['recorded_at'])); ?></td>
                             </tr>
                         <?php endforeach; ?>

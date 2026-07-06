@@ -17,10 +17,11 @@ $feedbacks = [];
 try {
     // 1. Fetch profile core elements along with tutor bio and rates
    $stmt = $pdo->prepare("
-        SELECT u.id, u.name, u.email, '' as bio, 0 as hourly_rate
-        FROM users u
-        WHERE u.id = ? AND LOWER(u.role) = 'tutor'
-    ");
+    SELECT u.id, u.name, u.email, tp.bio, tp.hourly_rate, tp.phone
+    FROM users u
+    LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
+    WHERE u.id = ? AND LOWER(u.role) = 'tutor'
+");
 
     $stmt->execute([$tutor_id]);
     $tutor = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -83,7 +84,12 @@ if (!$tutor) {
         
         <div class="profile-container">
             <h2 style="color: var(--navy); margin-top: 0; margin-bottom: 5px;"><?php echo htmlspecialchars($tutor['name']); ?></h2>
-            <p style="color: var(--slate); margin-top: 0; font-size: 14px; margin-bottom: 5px;">Contact Line: <strong><?php echo htmlspecialchars($tutor['email']); ?></strong></p>
+            <p style="color: var(--slate); margin-top: 0; font-size: 14px; margin-bottom: 5px;">
+    Contact Line: <strong><?php echo htmlspecialchars($tutor['email']); ?></strong>
+    <?php if (!empty($tutor['phone'])): ?>
+        · <strong><?php echo htmlspecialchars($tutor['phone']); ?></strong>
+    <?php endif; ?>
+</p>
             <div class="rate-tag">
                 Rate: <?php echo !empty($tutor['hourly_rate']) ? "KES " . number_format($tutor['hourly_rate'], 2) . " / hr" : "Unset"; ?>
             </div>
