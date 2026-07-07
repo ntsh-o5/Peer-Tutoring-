@@ -32,7 +32,7 @@ try {
     }
 
     // 2. Real-Time Dynamic Aggregate GPA Calculation Engine
-   $gpaStmt = $pdo->prepare("
+    $gpaStmt = $pdo->prepare("
     SELECT AVG(
         CASE grade_after
             WHEN 'A' THEN 85
@@ -46,6 +46,8 @@ try {
     FROM academic_progress 
     WHERE learner_id = ?
 ");
+
+
     $gpaStmt->execute([$learner_id]);
     $gpaResult = $gpaStmt->fetch(PDO::FETCH_ASSOC);
     
@@ -119,7 +121,7 @@ try {
         <section class="stats-grid">
             <div class="stat-card"><h3>Active Bookings</h3><p><?php echo $metrics['scheduled']; ?></p></div>
             <div class="stat-card"><h3>Completed Horizons</h3><p><?php echo $metrics['completed']; ?></p></div>
-            <div class="stat-card"><h3>Academic % Standing</h3><p style="color: #10b981;"><?php echo $metrics['gpa']; ?></p>%</div>
+            <div class="stat-card"><h3>Academic % Standing</h3><p style="color: #10b981;"><?php echo $metrics['gpa']; ?>%</p></div>
         </section>
 
         <h2>Functional Modules</h2>
