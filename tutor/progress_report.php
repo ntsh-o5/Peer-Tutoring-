@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_report'])) {
 
     try {
         // Securely fetch the actual learner_id mapped to this booking to prevent manual parameter injection
-        $verifyStmt = $pdo->prepare("SELECT learner_id FROM bookings WHERE booking_id = ? AND tutor_id = ?");
+        $verifyStmt = $pdo->prepare("SELECT learner_id FROM bookings WHERE id = ? AND tutor_id = ?");
         $verifyStmt->execute([$booking_id, $tutor_id]);
         $learner_id = $verifyStmt->fetchColumn();
 
@@ -48,12 +48,16 @@ $past_reports = [];
 try {
     // Look up historical unit performance metrics submitted by linked learners (Fixed column mapping: booking_id)
     $stmt = $pdo->prepare("
-        SELECT DISTINCT u.id as learner_id, u.name, ap.unit_code, ap.grade_point 
-        FROM academic_progress ap 
-        JOIN users u ON ap.learner_id = u.id 
-        WHERE u.id IN (SELECT DISTINCT learner_id FROM bookings WHERE tutor_id = ?)
-    ");
-    $stmt->execute([$tutor_id]);
+    SELECT DISTINCT u.id as learner_id, u.name, ap.unit_code, ap.grade_after 
+    FROM academic_progress ap 
+    JOIN users u ON ap.learner_id = u.id 
+    WHERE u.id IN (SELECT DISTINCT learner_id FROM bookings WHERE tutor_id = ?)
+    AND ap.unit_code IN (
+    SELECT unit_code FROM tutor_credentials 
+    WHERE tutor_id = ? AND submission_status = 'approved'
+    )
+");
+    $stmt->execute([$tutor_id, $tutor_id]);
     $students_grades = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Fetch existing filed progress reports (Fixed column mapping: booking_id)
@@ -61,7 +65,7 @@ try {
         SELECT pr.*, u.name as student_name, b.unit_code 
         FROM progress_reports pr 
         JOIN users u ON pr.learner_id = u.id 
-        JOIN bookings b ON pr.booking_id = b.booking_id 
+        JOIN bookings b ON pr.booking_id = b.id 
         WHERE pr.tutor_id = ? 
         ORDER BY pr.created_at DESC
     ");
@@ -129,11 +133,11 @@ try {
                             <?php
                             // Updated condition: Checks for both completed and claimed status tokens
                             $bStmt = $pdo->prepare("
-                                SELECT b.booking_id, b.learner_id, u.name, b.unit_code 
-                                FROM bookings b 
-                                JOIN users u ON b.learner_id = u.id 
-                                WHERE b.tutor_id = ? AND b.status IN ('completed', 'claimed')
-                            ");
+    SELECT b.id AS booking_id, b.learner_id, u.name, b.unit_code 
+    FROM bookings b 
+    JOIN users u ON b.learner_id = u.id 
+    WHERE b.tutor_id = ? AND b.status IN ('completed', 'reviewed')
+");
                             $bStmt->execute([$tutor_id]);
                             while($b = $bStmt->fetch(PDO::FETCH_ASSOC)) {
                                 echo "<option value='{$b['booking_id']}'>{$b['name']} ({$b['unit_code']})</option>";
@@ -172,7 +176,7 @@ try {
                                 <tr>
                                     <td><strong><?php echo htmlspecialchars($sg['name']); ?></strong></td>
                                     <td><span style="font-weight: 600; color: var(--navy);"><?php echo htmlspecialchars($sg['unit_code']); ?></span></td>
-                                    <td style="color: #10b981; font-weight: bold;"><?php echo number_format($sg['grade_point'], 2); ?></td>
+                                    <td style="color: #10b981; font-weight: bold;"><?php echo htmlspecialchars($sg['grade_after'] ?? 'Pending'); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

@@ -10,34 +10,19 @@ if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !
 
 require_once '../config/database.php';
 $tutor_id = $_SESSION['user_id'];
-$tutor_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'Applicant';
 
-// =========================================================================
-// AUTOMATIC APPROVAL INTERCEPT ROUTER
-// =========================================================================
+// Set verified session flag if tutor has at least one approved unit — no redirect
 try {
-    // Look for at least one approved unit assignment for this user
     $approvalCheck = $pdo->prepare("SELECT COUNT(*) FROM tutor_credentials WHERE tutor_id = ? AND submission_status = 'approved'");
     $approvalCheck->execute([$tutor_id]);
-    $approved_count = (int)$approvalCheck->fetchColumn();
-
-    if ($approved_count > 0) {
-        // Cache verification state inside session context to bypass onboarding later
+    if ((int)$approvalCheck->fetchColumn() > 0) {
         $_SESSION['is_verified'] = true;
-        
-        // Push the user directly into their main dashboard workspace
-        header("Location: dashboard.php");
-        exit;
     }
 } catch (PDOException $e) {
-    error_log("Bypass handshake query failure: " . $e->getMessage());
+    error_log("Verification check failure: " . $e->getMessage());
 }
 
-// If the tutor is already cached as verified via standard session parameters, bypass onboarding completely
-if (isset($_SESSION['is_verified']) && $_SESSION['is_verified'] === true) {
-    header("Location: dashboard.php");
-    exit;
-}
+$tutor_name = isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'Applicant';
 
 $message = '';
 $message_type = 'success';
@@ -143,13 +128,16 @@ try {
 <body>
 
     <div class="wrapper">
-        <header>
-            <div>
-                <h1 style="margin: 0; font-size: 24px; color: var(--navy);">Instructor Verification Desk</h1>
-                <p style="margin: 5px 0 0 0; color: var(--slate);">Welcome, <strong><?php echo $tutor_name; ?></strong>. Please submit your academic alignment records below.</p>
-            </div>
-            <a href="../auth/logout.php" style="background: #fee2e2; color: #b91c1c; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px;">\uD83D\uDEAA Log Out</a>
-        </header>
+       <header>
+    <div>
+        <h1 style="margin: 0; font-size: 24px; color: var(--navy);">Instructor Verification Desk</h1>
+        <p style="margin: 5px 0 0 0; color: var(--slate);">Welcome, <strong><?php echo $tutor_name; ?></strong>. Please submit your academic alignment records below.</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <a href="dashboard.php" style="color: var(--slate); text-decoration: none; font-weight: 600; font-size: 13px;">← Dashboard Hub</a>
+        <a href="../auth/logout.php" style="background: #fee2e2; color: #b91c1c; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px;">🚪 Log Out</a>
+    </div>
+</header>
 
         <?php if(!empty($message)): ?>
             <div style="padding: 12px; margin-bottom: 25px; border-radius: 6px; font-size: 14px; font-weight: 500; background: <?php echo $message_type === 'success' ? '#dcfce7; color: #166534;' : '#fee2e2; color: #b91c1c;'; ?>">
@@ -205,9 +193,9 @@ try {
                                     if ($status === 'pending') {
                                         echo '<span class="status-badge status-pending">Awaiting Review</span>';
                                     } elseif ($status === 'approved') {
-                                        echo '<span class="status-badge status-approved">Approved \u2705</span>';
+                                        echo '<span class="status-badge status-approved">Approved ✅</span>';
                                     } else {
-                                        echo '<span class="status-badge status-rejected">Rejected \u274C</span>';
+                                        echo '<span class="status-badge status-rejected">Rejected ❌</span>';
                                     }
                                     ?>
                                 </div>
@@ -215,7 +203,7 @@ try {
                         <?php endforeach; ?>
                     </div>
                     <div style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 12px; margin-top: 25px; font-size: 13px; font-weight: 500; line-height: 1.4;">
-                        \uD83D\uDCA1 <strong>Note:</strong> Once an administrator verifies and marks at least one of your unit credential submissions as <strong>Approved</strong>, your system role constraints will refresh to grant access to your primary operations dashboard hub.
+                        💡 <strong>Note:</strong> Once an administrator verifies and marks at least one of your unit credential submissions as <strong>Approved</strong>, your system role constraints will refresh to grant access to your primary operations dashboard hub.
                     </div>
                 <?php endif; ?>
             </div>

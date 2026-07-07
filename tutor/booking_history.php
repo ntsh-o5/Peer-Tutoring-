@@ -17,7 +17,7 @@ $status_filter = isset($_GET['status']) ? trim(strtolower($_GET['status'])) : 'a
 // Setup query parameters mapping
 $bindings = [$tutor_id];
 $sql_query = "
-    SELECT b.booking_id, b.unit_code, b.booking_date, b.status, u.name as student_name 
+    SELECT b.id AS booking_id, b.unit_code, b.booking_date, b.status, u.name as student_name 
     FROM bookings b
     JOIN users u ON b.learner_id = u.id
     WHERE b.tutor_id = ?
@@ -66,6 +66,7 @@ try {
         .status-claimed { background: #f3e8ff; color: #6b21a8; }
         .status-paid { background: #ccfbf1; color: #0f766e; }
         .status-rejected { background: #fee2e2; color: #b91c1c; }
+        .status-reviewed { background: #e0e7ff; color: #3730a3; }
     </style>
 </head>
 <body>
@@ -85,8 +86,7 @@ try {
             <a href="booking_history.php?status=pending" class="filter-link <?php echo $status_filter === 'pending' ? 'active' : ''; ?>">Pending</a>
             <a href="booking_history.php?status=approved" class="filter-link <?php echo $status_filter === 'approved' ? 'active' : ''; ?>">Approved</a>
             <a href="booking_history.php?status=completed" class="filter-link <?php echo $status_filter === 'completed' ? 'active' : ''; ?>">Completed</a>
-            <a href="booking_history.php?status=claimed" class="filter-link <?php echo $status_filter === 'claimed' ? 'active' : ''; ?>">Claimed</a>
-            <a href="booking_history.php?status=paid" class="filter-link <?php echo $status_filter === 'paid' ? 'active' : ''; ?>">Paid</a>
+            <a href="booking_history.php?status=reviewed" class="filter-link <?php echo $status_filter === 'reviewed' ? 'active' : ''; ?>">Reviewed</a>
             <a href="booking_history.php?status=rejected" class="filter-link <?php echo $status_filter === 'rejected' ? 'active' : ''; ?>">Rejected</a>
         </div>
 

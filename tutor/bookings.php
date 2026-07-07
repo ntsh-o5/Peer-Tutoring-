@@ -3,7 +3,7 @@
 session_start();
 
 // Strict security gate
-if (!isset($_SESSION['user_role']) || strtolower(trim($_SESSION['user_role'])) !== 'tutor') {
+if (!isset($_SESSION['role']) || strtolower(trim($_SESSION['role'])) !== 'tutor') {
     header("Location: ../auth/login.php");
     exit;
 }
@@ -23,18 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action'])) {
     
     // Strict lookup array map to block structural mutations
     $allowed_statuses = [
-        'accept'   => 'confirmed',
-        'deny'     => 'denied',
-        'complete' => 'completed'
-    ];
+    'accept'   => 'approved',
+    'deny'     => 'rejected',
+    'complete' => 'completed'
+];
+
+if (array_key_exists($action, $allowed_statuses)) {
+    $target_status = $allowed_statuses[$action];
     
-    if (array_key_exists($action, $allowed_statuses)) {
-        $target_status = $allowed_statuses[$action];
-        
-        try {
-            // Fixed column identifier: using booking_id instead of id
-            $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE booking_id = ? AND tutor_id = ?");
-            $updateStmt->execute([$target_status, $booking_id, $tutor_id]);
+    try {
+        $updateStmt = $pdo->prepare("UPDATE bookings SET status = ? WHERE id = ? AND tutor_id = ?");
+        $updateStmt->execute([$target_status, $booking_id, $tutor_id]);
             
             if ($updateStmt->rowCount() > 0) {
                 $status_message = "Success: Booking parameter shifted to " . strtoupper($target_status) . ".";
@@ -59,22 +58,22 @@ $booking_history = [];
 try {
     // Fixed column identifiers here as well (b.booking_id)
     $stmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, b.booking_date, b.status, u.name as student_name, u.email as student_email 
-        FROM bookings b 
-        JOIN users u ON b.learner_id = u.id 
-        WHERE b.tutor_id = ? 
-        ORDER BY b.booking_date DESC
-    ");
-    $stmt->execute([$tutor_id]);
-    
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $current_status = strtolower(trim($row['status']));
-        if ($current_status === 'scheduled') {
-            $booking_requests[] = $row; // Incoming pending queue
-        } else {
-            $booking_history[] = $row;  // Historical tracking rows
-        }
+    SELECT b.id AS booking_id, b.unit_code, b.booking_date, b.status, u.name as student_name, u.email as student_email 
+    FROM bookings b 
+    JOIN users u ON b.learner_id = u.id 
+    WHERE b.tutor_id = ? 
+    ORDER BY b.booking_date DESC
+");
+$stmt->execute([$tutor_id]);
+
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $current_status = strtolower(trim($row['status']));
+    if ($current_status === 'pending') {
+        $booking_requests[] = $row;
+    } else {
+        $booking_history[] = $row;
     }
+}
 } catch (PDOException $e) {
     error_log("Booking history engine lookup failures: " . $e->getMessage());
 }
@@ -204,7 +203,7 @@ try {
                                 </span>
                             </td>
                             <td>
-                                <?php if (strtolower($hist['status']) === 'confirmed' || strtolower($hist['status']) === 'approved'): ?>
+                                <?php if (strtolower($hist['status']) === 'approved'): ?>
                                     <form method="POST" action="bookings.php?action=complete" onsubmit="return confirm('Verify that this lesson has successfully concluded?');">
                                         <input type="hidden" name="booking_id" value="<?php echo $hist['booking_id']; ?>">
                                         <button type="submit" class="btn-action complete">Mark as Completed</button>

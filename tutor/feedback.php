@@ -20,7 +20,7 @@ try {
         FROM feedback f 
         JOIN ratings r ON f.booking_id = r.booking_id 
         JOIN users u ON f.learner_id = u.id 
-        JOIN bookings b ON f.booking_id = b.booking_id 
+        JOIN bookings b ON f.booking_id = b.id 
         WHERE b.tutor_id = ? 
         ORDER BY b.booking_date DESC
     ");

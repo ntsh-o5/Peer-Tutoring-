@@ -17,10 +17,11 @@ $feedbacks = [];
 try {
     // 1. Fetch profile core elements along with tutor bio and rates
    $stmt = $pdo->prepare("
-        SELECT u.id, u.name, u.email, '' as bio, 0 as hourly_rate
-        FROM users u
-        WHERE u.id = ? AND LOWER(u.role) = 'tutor'
-    ");
+    SELECT u.id, u.name, u.email, tp.bio, tp.hourly_rate, tp.phone
+    FROM users u
+    LEFT JOIN tutor_profiles tp ON u.id = tp.user_id
+    WHERE u.id = ? AND LOWER(u.role) = 'tutor'
+");
 
     $stmt->execute([$tutor_id]);
     $tutor = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -35,6 +36,46 @@ try {
         ");
         $unitStmt->execute([$tutor_id]);
         $approved_units = $unitStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Add near the other fetch blocks (after fetching $approved_units)
+$availability = [];
+try {
+    $availStmt = $pdo->prepare("SELECT day_of_week, start_time, end_time FROM tutor_availability WHERE tutor_id = ? ORDER BY 
+        CASE day_of_week
+            WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3
+            WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7
+        END, start_time ASC");
+    $availStmt->execute([$tutor_id]);
+    $raw_slots = $availStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // For each slot, find the next occurrence date and check if it's booked
+    foreach ($raw_slots as $slot) {
+        $next_date = new DateTime('next ' . $slot['day_of_week']);
+        // Handle case where today IS that weekday
+        if (date('l') === $slot['day_of_week']) {
+            $next_date = new DateTime('today');
+        }
+        $date_str = $next_date->format('Y-m-d');
+
+        $checkStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM bookings 
+            WHERE tutor_id = ? AND status IN ('pending', 'approved') 
+            AND DATE(booking_date) = ?
+        ");
+        $checkStmt->execute([$tutor_id, $date_str]);
+        $is_taken = (int)$checkStmt->fetchColumn() > 0;
+
+        $availability[] = [
+            'day_of_week' => $slot['day_of_week'],
+            'start_time' => $slot['start_time'],
+            'end_time' => $slot['end_time'],
+            'next_date' => $next_date->format('M d'),
+            'is_taken' => $is_taken
+        ];
+    }
+} catch (PDOException $e) {
+    error_log("Availability fetch error: " . $e->getMessage());
+}
 
         // 3. Fetch matching feedback records
         $fStmt = $pdo->prepare("
@@ -83,7 +124,12 @@ if (!$tutor) {
         
         <div class="profile-container">
             <h2 style="color: var(--navy); margin-top: 0; margin-bottom: 5px;"><?php echo htmlspecialchars($tutor['name']); ?></h2>
-            <p style="color: var(--slate); margin-top: 0; font-size: 14px; margin-bottom: 5px;">Contact Line: <strong><?php echo htmlspecialchars($tutor['email']); ?></strong></p>
+            <p style="color: var(--slate); margin-top: 0; font-size: 14px; margin-bottom: 5px;">
+    Contact Line: <strong><?php echo htmlspecialchars($tutor['email']); ?></strong>
+    <?php if (!empty($tutor['phone'])): ?>
+        · <strong><?php echo htmlspecialchars($tutor['phone']); ?></strong>
+    <?php endif; ?>
+</p>
             <div class="rate-tag">
                 Rate: <?php echo !empty($tutor['hourly_rate']) ? "KES " . number_format($tutor['hourly_rate'], 2) . " / hr" : "Unset"; ?>
             </div>
@@ -98,6 +144,23 @@ if (!$tutor) {
             <hr style="border: 0; border-top: 1px solid var(--border); margin: 25px 0;">
 
             <h3 style="color: var(--navy);">Schedule / Book a Session</h3>
+            <?php if (empty($availability)): ?>
+    <p style="color: #b91c1c; font-size: 13px; font-style: italic;">This tutor hasn't declared any availability windows yet — booking is disabled until they do.</p>
+<?php else: ?>
+    <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 12px 15px; border-radius: 6px; margin-bottom: 15px; font-size: 13px; color: #0369a1;">
+        <strong>Available Hours:</strong><br>
+        <?php foreach ($availability as $slot): ?>
+            <?php echo htmlspecialchars($slot['day_of_week']); ?> (<?php echo $slot['next_date']; ?>): 
+            <?php echo date('h:i A', strtotime($slot['start_time'])); ?> – <?php echo date('h:i A', strtotime($slot['end_time'])); ?>
+            <?php if ($slot['is_taken']): ?>
+                <span style="color:#b91c1c; font-weight:600;"> — Taken</span>
+            <?php else: ?>
+                <span style="color:#10b981; font-weight:600;"> — Open</span>
+            <?php endif; ?>
+            <br>
+        <?php endforeach; ?>
+    </div>
+<?php endif; ?>
             
             <?php if (empty($approved_units)): ?>
                 <p style="color: var(--slate); font-style: italic; font-size: 14px;">This tutor currently has no administrator-approved course units available for booking.</p>

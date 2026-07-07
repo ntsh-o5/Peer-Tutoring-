@@ -19,10 +19,10 @@ if ($booking_id === 0) {
 // Security Boundary Check: Ensure this booking actually belongs to the active learner
 try {
     $stmt = $pdo->prepare("
-        SELECT b.booking_id, b.unit_code, u.name as tutor_name 
+        SELECT b.id AS booking_id, b.unit_code, u.name as tutor_name 
         FROM bookings b
         JOIN users u ON b.tutor_id = u.id
-        WHERE b.booking_id = ? AND b.learner_id = ?
+        WHERE b.id = ? AND b.learner_id = ?
     ");
     $stmt->execute([$booking_id, $learner_id]);
     $session_details = $stmt->fetch(PDO::FETCH_ASSOC);
