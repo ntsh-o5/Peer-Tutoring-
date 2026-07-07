@@ -40,21 +40,23 @@ try {
         $filter_rating = intval($_GET['rating_filter']);
         
         $stmt = $pdo->prepare("
-            SELECT r.id, r.rating, r.comment, u.name as user_name
-            FROM ratings r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.rating = ?
-            ORDER BY r.id DESC
-        ");
+    SELECT r.id, r.rating, f.comments as comment, u.name as user_name
+    FROM ratings r
+    JOIN users u ON r.learner_id = u.id
+    LEFT JOIN feedback f ON f.booking_id = r.booking_id AND f.learner_id = r.learner_id
+    WHERE r.rating = ?
+    ORDER BY r.id DESC
+");
         $stmt->execute([$filter_rating]);
         $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $stmt = $pdo->query("
-            SELECT r.id, r.rating, r.comment, u.name as user_name
-            FROM ratings r
-            JOIN users u ON r.user_id = u.id
-            ORDER BY r.id DESC
-        ");
+       $stmt = $pdo->query("
+    SELECT r.id, r.rating, f.comments as comment, u.name as user_name
+    FROM ratings r
+    JOIN users u ON r.learner_id = u.id
+    LEFT JOIN feedback f ON f.booking_id = r.booking_id AND f.learner_id = r.learner_id
+    ORDER BY r.id DESC
+");
         $reviews_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

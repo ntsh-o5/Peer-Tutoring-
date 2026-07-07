@@ -31,7 +31,7 @@ try {
         $action = $_POST['action'];
         
         if ($action === 'confirm_payment') {
-            $stmt = $pdo->prepare("UPDATE payments SET status = 'Completed' WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE payments SET status = 'completed' WHERE payment_id = ?");
             $stmt->execute([$payment_id]);
         }
         
@@ -60,22 +60,22 @@ try {
     if (isset($_GET['search']) && trim($_GET['search']) !== "") {
         $search_query = trim($_GET['search']);
         $stmt = $pdo->prepare("
-            SELECT p.id, p.amount, p.status, p.payment_method, p.created_at, u.name as learner_name
-            FROM payments p
-            JOIN users u ON p.user_id = u.id
-            WHERE LOWER(u.user_role) = 'learner' AND LOWER(u.name) LIKE LOWER(?)
-            ORDER BY p.created_at DESC
-        ");
+    SELECT p.payment_id, p.amount, p.status, p.created_at, u.name as learner_name
+    FROM payments p
+    JOIN users u ON p.user_id = u.id
+    WHERE LOWER(u.role) = 'learner' AND LOWER(u.name) LIKE LOWER(?)
+    ORDER BY p.created_at DESC
+");
         $stmt->execute(["%$search_query%"]);
         $payment_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
         $stmt = $pdo->query("
-            SELECT p.id, p.amount, p.status, p.payment_method, p.created_at, u.name as learner_name
-            FROM payments p
-            JOIN users u ON p.user_id = u.id
-            WHERE LOWER(u.user_role) = 'learner'
-            ORDER BY p.created_at DESC
-        ");
+    SELECT p.payment_id, p.amount, p.status, p.created_at, u.name as learner_name
+    FROM payments p
+    JOIN users u ON p.user_id = u.id
+    WHERE LOWER(u.role) = 'learner'
+    ORDER BY p.created_at DESC
+");
         $payment_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -140,7 +140,6 @@ try {
                         <th>Learner Name</th>
                         <th>Amount</th>
                         <th>Transaction Date</th>
-                        <th>Clearing Method</th>
                         <th>Status</th>
                         <th>Action</th>
                     </tr>
@@ -155,11 +154,11 @@ try {
                     <?php else: ?>
                         <?php foreach ($payment_records as $pay): ?>
                             <tr>
-                                <td>#PAY-<?php echo $pay['id']; ?></td>
+                                <td>#PAY-<?php echo $pay['payment_id']; ?></td>
                                 <td><?php echo htmlspecialchars($pay['learner_name']); ?></td>
                                 <td><strong>KES <?php echo number_format($pay['amount'], 2); ?></strong></td>
                                 <td><?php echo date('M d, Y - H:i', strtotime($pay['created_at'])); ?></td>
-                                <td><span style="text-transform: uppercase; font-size:12px; font-weight:bold; color:#0f2038;"><?php echo htmlspecialchars($pay['payment_method'] ?: 'M-Pesa'); ?></span></td>
+                                <td><span style="text-transform: uppercase; font-size:12px; font-weight:bold; color:#0f2038;">M-PESA</span></td>
                                 <td>
                                     <?php 
                                         $st = strtolower(trim($pay['status']));
@@ -172,11 +171,11 @@ try {
                                 <td>
                                     <?php if ($st === 'pending'): ?>
                                         <form method="POST" action="learner_payments.php" style="margin: 0; display: inline;">
-                                            <input type="hidden" name="payment_id" value="<?php echo $pay['id']; ?>">
+                                            <input type="hidden" name="payment_id" value="<?php echo $pay['payment_id']; ?>">
                                             <button type="submit" name="action" value="confirm_payment" class="approve-btn">Confirm Receipt</button>
                                         </form>
                                     <?php else: ?>
-                                        <a href="view_receipt.php?id=<?php echo $pay['id']; ?>" class="view-btn" style="text-decoration: none; display: inline-block; text-align: center;">View Receipt</a>
+                                        <a href="view_receipt.php?id=<?php echo $pay['payment_id']; ?>" class="view-btn" style="text-decoration: none; display: inline-block; text-align: center;">View Receipt</a>
                                     <?php endif; ?>
                                 </td>
                             </tr>
